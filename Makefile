@@ -16,6 +16,7 @@ logs:
 
 smoke:
 	./scripts/smoke.sh
+	node scripts/e2e-auth.mjs
 
 test: test-api test-contracts test-web
 

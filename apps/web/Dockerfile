@@ -6,6 +6,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter @chainbank/web...
 COPY apps/web apps/web
+# Baked into the /api rewrite at build time.
+ARG CHAINBANK_API_URL=http://api:8080
+ENV CHAINBANK_API_URL=$CHAINBANK_API_URL
 RUN pnpm --filter @chainbank/web build
 
 FROM node:22-alpine

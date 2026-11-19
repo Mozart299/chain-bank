@@ -23,3 +23,7 @@ The project is defined by **[docs/specification.md](docs/specification.md)**. Re
 
 - `apps/web` uses Next.js 16 with `cacheComponents`. Read `apps/web/node_modules/next/dist/docs/` before relying on Next APIs from memory. Request-time data needs `await connection()` inside a `<Suspense>` boundary.
 - Hardhat 3: use `network.create()`, not `network.connect()`, which is deprecated.
+- Java 17: current web3j releases need Java 21. Ethereum signature recovery is in `wallet/EthSignatures.java` (BouncyCastle).
+- shadcn/ui: components live in `apps/web/src/components/ui`. Add more with `pnpm dlx shadcn@4.23.0 add <name>` (the radix-nova preset). Check that the generated files import `cn` from `@/lib/utils`; the CLI once wrote `from "cn"`.
+- API security: every mutating request with a session needs `X-CSRF-Token`. Sensitive actions call `CurrentSession.requireStepUp()`. Record security events through `AuditLog` inside the same transaction.
+- API tests: extend `ApiTestBase`. Its `TestClock` moves time forward; use `nextCode()` for fresh TOTP codes, because codes are single-use.

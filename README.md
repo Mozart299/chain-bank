@@ -10,7 +10,7 @@ The project is guided by the **[specification](docs/specification.md)**. Decisio
 
 | Path | What |
 | --- | --- |
-| `apps/web` | Next.js 16 dashboard |
+| `apps/web` | Next.js 16 dashboard (shadcn/ui, wagmi) |
 | `services/api` | Quarkus 3 API (Java 17), Flyway migrations, PostgreSQL ledger |
 | `contracts` | Hardhat 3 + viem + OpenZeppelin 5 (settlement contract arrives in Phase 3) |
 | `packages/shared` | Shared API schemas and generated contract types (later phases) |
@@ -23,7 +23,7 @@ You need Docker. For local development you also need Node 22+ with pnpm 10, and 
 
 ```sh
 make up      # build and boot postgres, chain, api, web (waits for health)
-make smoke   # end-to-end checks against the running stack
+make smoke   # smoke checks plus the auth/wallet end-to-end script
 ```
 
 - Web: http://localhost:3000
@@ -41,6 +41,22 @@ make web-dev          # Next.js on :3000, talks to CHAINBANK_API_URL (default :8
 make test             # API tests, contract tests, web lint and typecheck
 ```
 
+## Demo users
+
+`make up` seeds five fictional users. They all share the password `chainbank-demo-password` and the TOTP secret `CHAINBANKDEMOTOTPSECRETXUGX23456`. Add that secret to any authenticator app (as a manual key, time-based, 6 digits), then sign in at http://localhost:3000/login.
+
+| Email | Role |
+| --- | --- |
+| `alice@nile.demo` | Customer, Nile Demo Bank |
+| `bob@rwenzori.demo` | Customer, Rwenzori Demo Bank |
+| `olivia.ops@nile.demo` | Bank operator |
+| `sam.admin@chainbank.demo` | System administrator |
+| `aria.audit@chainbank.demo` | Auditor |
+
+These credentials are public on purpose, like Anvil's dev keys. Seeding only runs when `CHAINBANK_DEMO_SEED=true`.
+
+To link a wallet, add the Anvil network to MetaMask (RPC `http://localhost:8545`, chain ID `31337`). Importing one of Anvil's public dev keys gives you a funded test account.
+
 ## Seed data
 
 Migration `V2` creates two fictional banks: **BANK_A** (Nile Demo Bank, `INST-A`) and **BANK_B** (Rwenzori Demo Bank, `INST-B`). Each has equity, settlement, and suspense accounts. An opening journal gives each bank 1,000,000,000 xUGX of settlement capacity.
@@ -50,8 +66,8 @@ Migration `V2` creates two fictional banks: **BANK_A** (Nile Demo Bank, `INST-A`
 | Phase | Status |
 | --- | --- |
 | 0 Foundation: repo, ADRs, Docker, schema, CI, seeded banks | done |
-| 1 Authentication: sessions, roles, TOTP, wallet challenge and link | next |
-| 2 Core banking: accounts, transfers, state machine, idempotency | |
+| 1 Authentication: sessions, roles, TOTP, wallet challenge and link | done |
+| 2 Core banking: accounts, transfers, state machine, idempotency | next |
 | 3 Blockchain: permissioned settlement contract, gateway, receipts | |
 | 4 Audit and UX: dashboards, batch commitments, exceptions | |
 | 5 Hardening: threat review, failure exercises, testnet | |

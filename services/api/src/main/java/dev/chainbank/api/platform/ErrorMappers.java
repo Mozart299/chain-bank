@@ -9,9 +9,28 @@ import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
+import io.quarkus.security.AuthenticationFailedException;
+import io.quarkus.security.ForbiddenException;
+import io.quarkus.security.UnauthorizedException;
+
 public class ErrorMappers {
 
     private static final Logger LOG = Logger.getLogger(ErrorMappers.class);
+
+    @ServerExceptionMapper
+    public Response api(ApiException e) {
+        return respond(e.status(), e.code(), e.getMessage());
+    }
+
+    @ServerExceptionMapper({ UnauthorizedException.class, AuthenticationFailedException.class })
+    public Response unauthenticated(RuntimeException e) {
+        return respond(401, "UNAUTHENTICATED", "Authentication required");
+    }
+
+    @ServerExceptionMapper
+    public Response forbidden(ForbiddenException e) {
+        return respond(403, "FORBIDDEN", "You do not have permission for this action");
+    }
 
     @ServerExceptionMapper
     public Response validation(ConstraintViolationException e) {

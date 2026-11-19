@@ -31,6 +31,16 @@ services:
       DB_USER: ${DB_USER:-chainbank}
       DB_PASSWORD: ${DB_PASSWORD:-chainbank_local_only}
       CHAIN_RPC_URL: http://chain:8545
+      # Local-only security settings. A real deployment supplies its own key and HTTPS.
+      TOTP_KEY: ${TOTP_KEY:-bG9jYWwtY29tcG9zZS1vbmx5LXRvdHAta2V5LTMyYiE=}
+      WEB_ORIGIN: http://localhost:3000
+      SESSION_COOKIE_SECURE: "false"
+      CHAINBANK_DEMO_SEED: "true"
+      CHAINBANK_DEMO_PASSWORD: ${CHAINBANK_DEMO_PASSWORD:-chainbank-demo-password}
+      # Trust X-Forwarded-For only from the Docker network (the Next.js proxy), for per-client rate limits.
+      QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
+      QUARKUS_HTTP_PROXY_ALLOW_X_FORWARDED: "true"
+      QUARKUS_HTTP_PROXY_TRUSTED_PROXIES: 172.16.0.0/12
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -44,6 +54,8 @@ services:
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
+      args:
+        CHAINBANK_API_URL: http://api:8080
     environment:
       CHAINBANK_API_URL: http://api:8080
     ports: ["127.0.0.1:3000:3000"]
