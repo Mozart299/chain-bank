@@ -12,17 +12,18 @@ fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; exit 1; }
 echo "ChainBank smoke test"
 
 ready=$(curl -fsS "$API/q/health/ready") || fail "API readiness endpoint"
-echo "$ready" | grep -Eq '"status": *"UP"' && pass "API ready (DB, migrations, ledger invariants)" || fail "API not UP: $ready"
+grep -Eq '"status": *"UP"' <<<"$ready" && pass "API ready (DB, migrations, ledger invariants)" || fail "API not UP: $ready"
 
 banks=$(curl -fsS "$API/api/institutions") || fail "institutions endpoint"
 for code in BANK_A BANK_B; do
-  echo "$banks" | grep -q "\"$code\"" && pass "seeded $code" || fail "missing $code"
+  grep -q "\"$code\"" <<<"$banks" && pass "seeded $code" || fail "missing $code"
 done
 
 chain_id=$(curl -fsS -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$CHAIN") || fail "chain RPC"
-echo "$chain_id" | grep -q '0x7a69' && pass "local chain id 31337" || fail "unexpected chain: $chain_id"
+grep -q '0x7a69' <<<"$chain_id" && pass "local chain id 31337" || fail "unexpected chain: $chain_id"
 
-curl -fsS "$WEB" | grep -q "Nile Demo Bank" && pass "web renders live API data" || fail "web did not render"
+page=$(curl -fsS "$WEB") || fail "web unreachable"
+grep -q "Nile Demo Bank" <<<"$page" && pass "web renders live API data" || fail "web did not render API data"
 
 echo "All smoke checks passed."
