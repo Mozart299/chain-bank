@@ -1,0 +1,25 @@
+# ChainBank
+
+The project is defined by **[docs/specification.md](docs/specification.md)**. Read the relevant sections before starting any feature or phase. Decisions that refine the spec live in `docs/adr/` and override it. Security status is tracked in `docs/threat-model.md`.
+
+## Rules
+
+- Build phase by phase, following spec §14. Each phase is done only when its exit condition is met and backed by tests.
+- Money is `bigint` minor units of xUGX. Never use floating point.
+- Ledger invariants are enforced in PostgreSQL (see ADR 0003). Never weaken a trigger or constraint to make code work.
+- Migrations are append-only. Never edit an applied `V*__*.sql` file; add a new one.
+- A wallet address never authenticates a user (spec §7.1).
+- Only institution pseudonyms, settlement IDs, amounts, and commitments go on-chain. Never put PII on-chain.
+- Never commit private keys or secrets. Testnet keys go in the Hardhat keystore.
+- Record each new resolution of a spec §16 open decision as an ADR, and update the status table in §16.
+
+## Commands
+
+- `make up` / `make smoke` / `make down` / `make reset`: run the full stack
+- `make test`: API tests (need Docker), contract tests, web lint and typecheck
+- `make api-dev`, `make web-dev`: local development servers
+
+## Gotchas
+
+- `apps/web` uses Next.js 16 with `cacheComponents`. Read `apps/web/node_modules/next/dist/docs/` before relying on Next APIs from memory. Request-time data needs `await connection()` inside a `<Suspense>` boundary.
+- Hardhat 3: use `network.create()`, not `network.connect()`, which is deprecated.

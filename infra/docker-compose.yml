@@ -1,0 +1,54 @@
+name: chainbank
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: chainbank
+      POSTGRES_USER: ${DB_USER:-chainbank}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chainbank_local_only}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d chainbank"]
+      interval: 3s
+      retries: 20
+
+  chain:
+    # Local EVM (chain id 31337). Deterministic dev accounts; never use these keys anywhere real.
+    image: ghcr.io/foundry-rs/foundry:stable
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--chain-id", "31337", "--block-time", "2"]
+    ports: ["127.0.0.1:8545:8545"]
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://127.0.0.1:8545"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build: ../services/api
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/chainbank
+      DB_USER: ${DB_USER:-chainbank}
+      DB_PASSWORD: ${DB_PASSWORD:-chainbank_local_only}
+      CHAIN_RPC_URL: http://chain:8545
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      chain: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://127.0.0.1:8080/q/health/ready"]
+      interval: 5s
+      retries: 30
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      CHAINBANK_API_URL: http://api:8080
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  pgdata:

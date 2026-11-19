@@ -1,0 +1,13 @@
+{
+  "name": "chainbank",
+  "private": true,
+  "packageManager": "pnpm@10.26.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "contracts:test": "pnpm --filter @chainbank/contracts test",
+    "web:dev": "pnpm --filter @chainbank/web dev",
+    "web:build": "pnpm --filter @chainbank/web build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck"
+  }
+}
