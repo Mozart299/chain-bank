@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Phase 1 end-to-end check against the running stack (make up), through the web app's /api proxy:
 // register -> TOTP confirm -> login -> me -> CSRF enforced -> wallet challenge -> sign -> verify
-// -> replay rejected -> logout -> session dead.
+// -> replay rejected -> cross-bank transfer -> TOTP approval -> idempotent replay -> balances
+// -> logout -> session dead.
 import { createHmac, randomUUID } from "node:crypto";
 
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -43,6 +44,13 @@ function totp(secretBase32, step) {
 }
 const currentStep = () => Math.floor(Date.now() / 1000 / 30);
 
+/** Next unused code: TOTP codes are single-use, and the server accepts steps within ±1 of now. */
+async function freshCode(secretBase32, lastUsedStep) {
+  const step = lastUsedStep + 1;
+  while (currentStep() + 1 < step) await new Promise((r) => setTimeout(r, 1000));
+  return { code: totp(secretBase32, step), step };
+}
+
 // --- minimal cookie-aware client --------------------------------------------------------------
 async function call(path, { method = "GET", body, cookie, csrf } = {}) {
   const headers = { Accept: "application/json", Origin: ORIGIN };
@@ -65,7 +73,7 @@ async function call(path, { method = "GET", body, cookie, csrf } = {}) {
   return { status: res.status, json, headers: res.headers };
 }
 
-console.log("ChainBank Phase 1 end-to-end (auth + wallet)");
+console.log("ChainBank end-to-end (auth, wallet, transfers)");
 
 const email = `e2e-${randomUUID().slice(0, 8)}@example.test`;
 const password = "e2e correct horse battery staple";
@@ -112,6 +120,66 @@ expect(replay.status === 404, "replayed signature rejected", replay.status);
 
 const wallets = await call("/api/wallet", { cookie });
 expect(wallets.status === 200 && wallets.json?.length === 1, "wallet listed", wallets.status);
+
+// --- Phase 2: accounts and transfers ------------------------------------------------------------
+const accounts = await call("/api/accounts", { cookie });
+const myAccount = accounts.json?.[0];
+expect(accounts.status === 200 && myAccount?.availableBalance === 10_000_000, "account opened with demo funds", accounts.status);
+
+// A payee at the other bank.
+const payeeEmail = `e2e-payee-${randomUUID().slice(0, 8)}@example.test`;
+const payeeReg = await call("/api/auth/register", {
+  method: "POST",
+  body: { email: payeeEmail, password, displayName: "E2E Payee", institutionCode: "BANK_B" },
+});
+const payeeSecret = payeeReg.json?.totpSecret;
+const pStep = currentStep();
+await call("/api/auth/totp/confirm", { method: "POST", body: { email: payeeEmail, password, code: totp(payeeSecret, pStep) } });
+const payeeLogin = await call("/api/auth/login", { method: "POST", body: { email: payeeEmail, password, code: totp(payeeSecret, pStep + 1) } });
+const payeeCookie = /cb_session=([^;]+)/.exec(payeeLogin.headers.get("set-cookie") ?? "")?.[1];
+const payeeAccount = (await call("/api/accounts", { cookie: payeeCookie })).json?.[0];
+expect(payeeAccount?.accountNumber?.startsWith("RWZ-"), "payee account at the other bank", payeeAccount?.accountNumber);
+
+const transferBody = {
+  sourceAccountId: myAccount?.id,
+  destinationAccountNumber: payeeAccount?.accountNumber,
+  amount: 50_000,
+  currency: "xUGX",
+  reference: "e2e",
+};
+const key = randomUUID();
+const sendIt = () =>
+  fetch(`${WEB}/api/transfers`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: ORIGIN,
+      Cookie: `cb_session=${cookie}`,
+      "X-CSRF-Token": csrf,
+      "Idempotency-Key": key,
+    },
+    body: JSON.stringify(transferBody),
+  });
+const created = await sendIt();
+const transfer = await created.json();
+expect(created.status === 201 && transfer.state === "VALIDATED" && transfer.requiresStepUp, "new payee needs approval", created.status);
+
+const { code: approveCode } = await freshCode(secret, step + 1);
+const approved = await call(`/api/transfers/${transfer.id}/approve`, { method: "POST", cookie, csrf, body: { code: approveCode } });
+expect(approved.status === 200 && approved.json?.state === "APPROVED", "approved cross-bank transfer is posted", approved.json?.state);
+
+const replayed = await sendIt();
+const replayBody = await replayed.json();
+expect(
+  replayed.status === 200 && replayed.headers.get("idempotent-replayed") === "true" && replayBody.id === transfer.id,
+  "retry with same Idempotency-Key returns the original",
+  replayed.status,
+);
+
+const after1 = (await call("/api/accounts", { cookie })).json?.[0];
+const after2 = (await call("/api/accounts", { cookie: payeeCookie })).json?.[0];
+expect(after1?.availableBalance === 9_950_000, "payer charged exactly once", after1?.availableBalance);
+expect(after2?.availableBalance === 10_050_000, "payee credited", after2?.availableBalance);
 
 const logout = await call("/api/auth/logout", { method: "POST", cookie, csrf });
 expect(logout.status === 204, "logout", logout.status);

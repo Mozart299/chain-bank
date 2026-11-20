@@ -24,6 +24,30 @@ public interface ChainbankConfig {
 
     Chain chain();
 
+    Transfers transfers();
+
+    /** Spec section 16 decisions, recorded in ADR 0005. All amounts in xUGX minor units. */
+    interface Transfers {
+        /** Amounts above this need the customer's step-up approval. */
+        @WithDefault("1000000")
+        long stepUpThreshold();
+
+        /** Cross-bank amounts above this are flagged for bank-operator review. */
+        @WithDefault("2000000")
+        long reviewThreshold();
+
+        @WithDefault("5000000")
+        long dailyLimit();
+
+        /** Demo funds deposited into every new customer account. */
+        @WithDefault("10000000")
+        long openingBalance();
+
+        /** How long a transfer may wait for approvals before it is cancelled and funds released. */
+        @WithDefault("PT15M")
+        Duration approvalTtl();
+    }
+
     interface Chain {
         /** JSON-RPC endpoint of the EVM chain (Anvil locally); used by the Phase 3 gateway. */
         String rpcUrl();

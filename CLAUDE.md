@@ -26,4 +26,7 @@ The project is defined by **[docs/specification.md](docs/specification.md)**. Re
 - Java 17: current web3j releases need Java 21. Ethereum signature recovery is in `wallet/EthSignatures.java` (BouncyCastle).
 - shadcn/ui: components live in `apps/web/src/components/ui`. Add more with `pnpm dlx shadcn@4.23.0 add <name>` (the radix-nova preset). Check that the generated files import `cn` from `@/lib/utils`; the CLI once wrote `from "cn"`.
 - API security: every mutating request with a session needs `X-CSRF-Token`. Sensitive actions call `CurrentSession.requireStepUp()`. Record security events through `AuditLog` inside the same transaction.
+- Next 16 + `cacheComponents`: a client component that calls `usePathname`/`useParams` above a dynamic route (`[id]`) must be inside `<Suspense>`, or `next build` fails. The header and the account shell are wrapped for this reason.
+- Money paths: lock accounts first with `TransferService.lockAccounts` (UUID text order), reserve with a conditional UPDATE, and change state with compare-and-set. Never write `account_balances.ledger_minor` directly; only journal postings move it.
+- Every `POST /api/transfers` needs an `Idempotency-Key`. The web send form makes a new one per distinct form state.
 - API tests: extend `ApiTestBase`. Its `TestClock` moves time forward; use `nextCode()` for fresh TOTP codes, because codes are single-use.

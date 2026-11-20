@@ -114,6 +114,70 @@ public abstract class ApiTestBase {
         as(s).body(Map.of("code", nextCode(s.totpSecret()))).post("/api/auth/step-up").then().statusCode(204);
     }
 
+    // --- Phase 2 helpers ---------------------------------------------------------------------
+
+    protected Session newCustomerAt(String prefix, String institution) {
+        Map<String, String> u = registerActive(prefix, institution);
+        return login(u.get("email"), u.get("secret"));
+    }
+
+    /** The customer's deposit account as returned by GET /api/accounts. */
+    protected Map<String, Object> account(Session s) {
+        java.util.List<Map<String, Object>> accounts = as(s).get("/api/accounts").then().statusCode(200).extract().jsonPath()
+                .getList("$");
+        return accounts.get(0);
+    }
+
+    protected String accountId(Session s) {
+        return (String) account(s).get("id");
+    }
+
+    protected String accountNumber(Session s) {
+        return (String) account(s).get("accountNumber");
+    }
+
+    protected long available(Session s) {
+        return ((Number) account(s).get("availableBalance")).longValue();
+    }
+
+    protected Response send(Session from, String payeeNumber, long amount, String key) {
+        return as(from).header("Idempotency-Key", key)
+                .body(Map.of("sourceAccountId", accountId(from), "destinationAccountNumber", payeeNumber,
+                        "amount", amount, "currency", "xUGX", "reference", "test"))
+                .post("/api/transfers");
+    }
+
+    protected Response send(Session from, Session to, long amount) {
+        return send(from, accountNumber(to), amount, UUID.randomUUID().toString());
+    }
+
+    protected Response approveTransfer(Session s, String transferId) {
+        return as(s).body(Map.of("code", nextCode(s.totpSecret()))).post("/api/transfers/" + transferId + "/approve");
+    }
+
+    /** Sends and, if the transfer waits for the customer's approval, approves it. Returns the final body. */
+    protected Response sendApproved(Session from, Session to, long amount) {
+        Response r = send(from, to, amount).then().statusCode(201).extract().response();
+        if ("VALIDATED".equals(r.path("state")) && Boolean.TRUE.equals(r.path("requiresStepUp"))) {
+            return approveTransfer(from, r.path("id")).then().statusCode(200).extract().response();
+        }
+        return r;
+    }
+
+    protected long queryLong(String sql, Object... args) {
+        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) {
+                ps.setObject(i + 1, args[i]);
+            }
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     protected void exec(String sql, Object... args) {
         try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             for (int i = 0; i < args.length; i++) {

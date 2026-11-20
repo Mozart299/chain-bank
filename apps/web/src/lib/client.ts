@@ -33,10 +33,10 @@ export class ApiRequestError extends Error {
 
 export async function api<T = void>(
   path: string,
-  init: { method?: "GET" | "POST" | "DELETE"; body?: unknown } = {},
+  init: { method?: "GET" | "POST" | "DELETE"; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<T> {
   const method = init.method ?? "GET";
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: "application/json", ...init.headers };
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET" && csrfToken) headers["X-CSRF-Token"] = csrfToken;
 

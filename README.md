@@ -57,6 +57,17 @@ These credentials are public on purpose, like Anvil's dev keys. Seeding only run
 
 To link a wallet, add the Anvil network to MetaMask (RPC `http://localhost:8545`, chain ID `31337`). Importing one of Anvil's public dev keys gives you a funded test account.
 
+## Sending money
+
+Every customer gets a current account with **xUGX 10,000,000** of fictional funds. Bob's account number is on his Overview page (for example `RWZ-10000002`).
+
+1. Sign in as Alice and open **Send money**. Enter Bob's account number and an amount.
+2. A first payment to a payee, or any amount over **1,000,000**, waits for approval. Enter a code from your authenticator app on the transfer page. Unapproved transfers are cancelled after 15 minutes and the held funds are released.
+3. Interbank payments over **2,000,000** also need a bank operator. Sign in as `olivia.ops@nile.demo`, open **Reviews**, verify with a code, then approve or reject.
+4. A same-bank payment completes immediately. An interbank payment shows *Posted · awaiting settlement* until Phase 3 settles it on-chain.
+
+The daily limit is **5,000,000** per customer. The rules and the accounting are in [ADR 0005](docs/adr/0005-transfers-limits-and-accounting.md).
+
 ## Seed data
 
 Migration `V2` creates two fictional banks: **BANK_A** (Nile Demo Bank, `INST-A`) and **BANK_B** (Rwenzori Demo Bank, `INST-B`). Each has equity, settlement, and suspense accounts. An opening journal gives each bank 1,000,000,000 xUGX of settlement capacity.
@@ -67,7 +78,7 @@ Migration `V2` creates two fictional banks: **BANK_A** (Nile Demo Bank, `INST-A`
 | --- | --- |
 | 0 Foundation: repo, ADRs, Docker, schema, CI, seeded banks | done |
 | 1 Authentication: sessions, roles, TOTP, wallet challenge and link | done |
-| 2 Core banking: accounts, transfers, state machine, idempotency | next |
-| 3 Blockchain: permissioned settlement contract, gateway, receipts | |
+| 2 Core banking: accounts, transfers, state machine, idempotency | done |
+| 3 Blockchain: permissioned settlement contract, gateway, receipts | next |
 | 4 Audit and UX: dashboards, batch commitments, exceptions | |
 | 5 Hardening: threat review, failure exercises, testnet | |

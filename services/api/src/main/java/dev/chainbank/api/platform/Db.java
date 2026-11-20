@@ -39,6 +39,32 @@ public class Db {
         }
     }
 
+    /**
+     * Like {@link #tx} but retries (up to 3 attempts) when PostgreSQL aborts the transaction for a
+     * deadlock (40P01) or serialization failure (40001). Only use for work whose side effects all
+     * live inside the transaction.
+     */
+    public <T> T txRetrying(Work<T> work) {
+        for (int attempt = 1;; attempt++) {
+            try {
+                return tx(work);
+            } catch (DataAccessException e) {
+                if (attempt >= 3 || !isRetryable(e)) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    static boolean isRetryable(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof SQLException s && ("40P01".equals(s.getSQLState()) || "40001".equals(s.getSQLState()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean isUniqueViolation(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
             if (t instanceof SQLException s && "23505".equals(s.getSQLState())) {

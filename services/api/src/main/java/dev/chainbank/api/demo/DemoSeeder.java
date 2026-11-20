@@ -16,6 +16,7 @@ import io.quarkus.runtime.StartupEvent;
 import dev.chainbank.api.auth.PasswordHasher;
 import dev.chainbank.api.auth.SecretCipher;
 import dev.chainbank.api.auth.Totp;
+import dev.chainbank.api.ledger.AccountService;
 import dev.chainbank.api.platform.ChainbankConfig;
 import dev.chainbank.api.platform.Db;
 
@@ -54,6 +55,9 @@ public class DemoSeeder {
     @Inject
     SecretCipher cipher;
 
+    @Inject
+    AccountService accounts;
+
     void onStart(@Observes StartupEvent ev) {
         if (!config.demo().seed()) {
             return;
@@ -64,35 +68,41 @@ public class DemoSeeder {
         int created = db.tx(c -> {
             int n = 0;
             for (DemoUser u : USERS) {
-                try (PreparedStatement check = c.prepareStatement("SELECT 1 FROM users WHERE lower(email) = ?")) {
+                UUID id = null;
+                try (PreparedStatement check = c.prepareStatement("SELECT id FROM users WHERE lower(email) = ?")) {
                     check.setString(1, u.email());
                     try (ResultSet rs = check.executeQuery()) {
                         if (rs.next()) {
-                            continue;
+                            id = rs.getObject(1, UUID.class);
                         }
                     }
                 }
-                UUID id = UUID.randomUUID();
-                try (PreparedStatement ps = c.prepareStatement("""
-                        INSERT INTO users (id, institution_id, email, display_name, password_hash, totp_secret_cipher,
-                                           totp_enabled_at, status)
-                        VALUES (?, (SELECT id FROM institutions WHERE code = ?), ?, ?, ?, ?, now(), 'ACTIVE')""")) {
-                    ps.setObject(1, id);
-                    ps.setString(2, u.institution());
-                    ps.setString(3, u.email());
-                    ps.setString(4, u.name());
-                    ps.setString(5, passwords.hash(password));
-                    ps.setBytes(6, cipher.encrypt(secret, id));
-                    ps.executeUpdate();
-                }
-                for (String role : u.roles()) {
-                    try (PreparedStatement ps = c.prepareStatement("INSERT INTO user_roles (user_id, role) VALUES (?, ?)")) {
+                if (id == null) {
+                    id = UUID.randomUUID();
+                    try (PreparedStatement ps = c.prepareStatement("""
+                            INSERT INTO users (id, institution_id, email, display_name, password_hash, totp_secret_cipher,
+                                               totp_enabled_at, status)
+                            VALUES (?, (SELECT id FROM institutions WHERE code = ?), ?, ?, ?, ?, now(), 'ACTIVE')""")) {
                         ps.setObject(1, id);
-                        ps.setString(2, role);
+                        ps.setString(2, u.institution());
+                        ps.setString(3, u.email());
+                        ps.setString(4, u.name());
+                        ps.setString(5, passwords.hash(password));
+                        ps.setBytes(6, cipher.encrypt(secret, id));
                         ps.executeUpdate();
                     }
+                    for (String role : u.roles()) {
+                        try (PreparedStatement ps = c.prepareStatement("INSERT INTO user_roles (user_id, role) VALUES (?, ?)")) {
+                            ps.setObject(1, id);
+                            ps.setString(2, role);
+                            ps.executeUpdate();
+                        }
+                    }
+                    n++;
                 }
-                n++;
+                if (u.roles().contains("CUSTOMER")) {
+                    accounts.ensureDefaultAccount(c, id);
+                }
             }
             return n;
         });

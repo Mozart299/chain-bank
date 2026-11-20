@@ -212,8 +212,8 @@ Each phase should include a short explanation, a hands-on task, and a test exerc
 | # | Decision | Status |
 | --- | --- | --- |
 | 1 | Primary authentication: passkeys or password plus MFA (wallet linking stays supplementary). | **Resolved:** password + TOTP, see [ADR 0002](adr/0002-primary-authentication.md) |
-| 2 | Initial test currency (suggested: fictional xUGX), minimum confirmation policy, sample transfer limits. | Currency **resolved:** xUGX, see [ADR 0003](adr/0003-money-and-ledger-invariants.md). Confirmations and limits are open. |
-| 3 | Institution operator approval model; whether all cross-bank transfers need manual review. | Open |
+| 2 | Initial test currency (suggested: fictional xUGX), minimum confirmation policy, sample transfer limits. | Currency **resolved** ([ADR 0003](adr/0003-money-and-ledger-invariants.md)); limits **resolved** ([ADR 0005](adr/0005-transfers-limits-and-accounting.md)); confirmation policy open (Phase 3) |
+| 3 | Institution operator approval model; whether all cross-bank transfers need manual review. | **Resolved:** only flagged ones (cross-bank > 2,000,000), see [ADR 0005](adr/0005-transfers-limits-and-accounting.md) |
 | 4 | Event-batching strategy and chain checkpoint frequency for audit commitments. | Open |
 | 5 | Whether the final learning phase explores Hyperledger Besu or another permissioned consortium network. | Open |
 

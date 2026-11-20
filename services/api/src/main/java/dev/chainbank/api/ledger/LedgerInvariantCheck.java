@@ -24,9 +24,9 @@ public class LedgerInvariantCheck implements HealthCheck {
 
     static final String UNBALANCED_JOURNALS = """
             SELECT count(*) FROM (
-              SELECT journal_id FROM journal_lines
-              GROUP BY journal_id, currency
-              HAVING sum(debit_minor) <> sum(credit_minor)
+              SELECT l.journal_id FROM journal_lines l JOIN accounts a ON a.id = l.account_id
+              GROUP BY l.journal_id, l.currency, a.institution_id
+              HAVING sum(l.debit_minor) <> sum(l.credit_minor)
             ) x""";
 
     static final String DRIFTED_BALANCES = """

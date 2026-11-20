@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { Suspense } from "react";
 
 import { SessionProvider } from "@/components/session-provider";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader, SiteHeaderFallback } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <SessionProvider>
-            <SiteHeader />
+            {/* The header reads the URL; on dynamic routes that needs a Suspense boundary (cacheComponents). */}
+            <Suspense fallback={<SiteHeaderFallback />}>
+              <SiteHeader />
+            </Suspense>
             <div className="flex flex-1 flex-col">{children}</div>
           </SessionProvider>
           <Toaster richColors />

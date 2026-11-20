@@ -65,6 +65,17 @@ class LedgerSchemaTest {
     }
 
     @Test
+    void journalMustBalanceWithinEachBank() {
+        // Balanced overall (100 = 100) but money appears at Bank B out of nothing at Bank A.
+        SQLException e = assertThrows(SQLException.class, () -> inTx(c -> {
+            UUID j = journal(c);
+            line(c, j, BANK_A_SUSPENSE, 100, 0);
+            line(c, j, "00000000-0000-0000-0003-00000000000b", 0, 100);
+        }));
+        assertTrue(e.getMessage().contains("unbalanced for institution"), e.getMessage());
+    }
+
+    @Test
     void journalWithoutLinesIsRejected() {
         SQLException e = assertThrows(SQLException.class, () -> inTx(LedgerSchemaTest::journal));
         assertTrue(e.getMessage().contains("no lines"), e.getMessage());

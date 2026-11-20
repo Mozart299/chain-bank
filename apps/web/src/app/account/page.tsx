@@ -1,154 +1,171 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, type SubmitEvent } from "react";
+import { ArrowDownLeft, ArrowUpRight, Copy, Send } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { FormError } from "@/components/form-error";
 import { useSession } from "@/components/session-provider";
-import { TotpField } from "@/components/totp-field";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { TransferStatus } from "@/components/transfer-status";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { api, errorMessage, setCsrfToken } from "@/lib/client";
+import { awaitingCustomer, formatMoney, signedMoney, type Account, type Transfer } from "@/lib/banking";
+import { api, errorMessage } from "@/lib/client";
 
-import { WalletPanel } from "./wallet-panel";
-
-export default function AccountPage() {
-  const router = useRouter();
-  const { me, status, refresh } = useSession();
+export default function OverviewPage() {
+  const { me } = useSession();
+  const [account, setAccount] = useState<Account | null>(null);
+  const [transfers, setTransfers] = useState<Transfer[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const isCustomer = me?.roles.includes("CUSTOMER") ?? false;
 
   useEffect(() => {
-    if (status === "anonymous") router.replace("/login");
-  }, [status, router]);
+    if (!isCustomer) return;
+    Promise.all([api<Account[]>("/api/accounts"), api<Transfer[]>("/api/transfers?limit=20")])
+      .then(([accounts, list]) => {
+        setAccount(accounts[0] ?? null);
+        setTransfers(list);
+      })
+      .catch((e) => setError(errorMessage(e)));
+  }, [isCustomer]);
 
-  if (status !== "authenticated" || !me) {
+  if (!isCustomer) {
     return (
-      <main className="text-muted-foreground mx-auto w-full max-w-2xl px-4 py-12" aria-live="polite">
-        Loading your account…
-      </main>
+      <Card>
+        <CardHeader>
+          <CardTitle>Staff account</CardTitle>
+          <CardDescription>
+            Your role has no customer accounts.{" "}
+            {me?.roles.includes("BANK_OPERATOR") && (
+              <Link href="/operator" className="text-foreground underline underline-offset-4">
+                Open the review queue
+              </Link>
+            )}
+          </CardDescription>
+        </CardHeader>
+      </Card>
     );
   }
 
-  const stepUpActive = me.stepUpValidUntil !== null && new Date(me.stepUpValidUntil) > new Date();
+  if (error) return <FormError message={error} />;
+  if (!account || !transfers) {
+    return (
+      <p className="text-muted-foreground" aria-live="polite">
+        Loading balances…
+      </p>
+    );
+  }
+
+  const needsAction = transfers.filter(awaitingCustomer);
 
   return (
-    <main className="mx-auto w-full max-w-2xl space-y-6 px-4 py-10">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">{me.displayName}</h1>
-        <p className="text-muted-foreground text-sm">{me.email}</p>
-        <div className="flex flex-wrap gap-2">
-          {me.roles.map((r) => (
-            <Badge key={r} variant="secondary">
-              {r}
-            </Badge>
-          ))}
-        </div>
-      </header>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardDescription>{account.institution.name} · Current account</CardDescription>
+          <CardTitle className="text-3xl tabular-nums">
+            {formatMoney(account.availableBalance, account.currency)}
+          </CardTitle>
+          <p className="text-muted-foreground text-sm">Available balance</p>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4">
+          <div className="text-muted-foreground space-y-1 text-sm">
+            <p className="flex items-center gap-2">
+              Account number <span className="text-foreground font-mono">{account.accountNumber}</span>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Copy account number"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(account.accountNumber);
+                  toast.success("Account number copied");
+                }}
+              >
+                <Copy aria-hidden />
+              </Button>
+            </p>
+            {account.reservedBalance > 0 && (
+              <p>
+                {formatMoney(account.reservedBalance)} held for pending transfers · ledger{" "}
+                {formatMoney(account.ledgerBalance)}
+              </p>
+            )}
+          </div>
+          <Link href="/account/send" className={buttonVariants()}>
+            <Send aria-hidden />
+            Send money
+          </Link>
+        </CardContent>
+      </Card>
 
-      <StepUpCard active={stepUpActive} until={me.stepUpValidUntil} onDone={refresh} />
+      {needsAction.length > 0 && (
+        <Card className="border-amber-500/50">
+          <CardHeader>
+            <CardTitle>Waiting for your approval</CardTitle>
+            <CardDescription>
+              Approve with your authenticator code within 15 minutes, or the funds are released.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TransferList transfers={needsAction} />
+          </CardContent>
+        </Card>
+      )}
 
-      {me.roles.includes("CUSTOMER") && <WalletPanel stepUpActive={stepUpActive} />}
-
-      <SessionsCard
-        stepUpActive={stepUpActive}
-        onRevoked={async () => {
-          await refresh();
-          router.replace("/login");
-        }}
-      />
-    </main>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {transfers.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No transfers yet. Your account was opened with {formatMoney(10_000_000)} of demo funds.
+            </p>
+          ) : (
+            <TransferList transfers={transfers} />
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
-function StepUpCard({ active, until, onDone }: { active: boolean; until: string | null; onDone: () => unknown }) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    setPending(true);
-    setError(null);
-    try {
-      await api("/api/auth/step-up", { method: "POST", body: { code: new FormData(form).get("code") } });
-      form.reset();
-      toast.success("Verified. Sensitive actions are unlocked for 5 minutes.");
-      onDone();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setPending(false);
-    }
-  }
-
+function TransferList({ transfers }: { transfers: Transfer[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Step-up verification</CardTitle>
-        <CardDescription>
-          Sensitive actions (adding another wallet, unlinking, revoking sessions) need a fresh authenticator code.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        {active && until ? (
-          <Alert>
-            <ShieldCheck aria-hidden />
-            <AlertDescription>Verified until {new Date(until).toLocaleTimeString()}.</AlertDescription>
-          </Alert>
-        ) : (
-          <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-4" noValidate>
-            <TotpField description={null} />
-            <Button type="submit" disabled={pending} aria-busy={pending || undefined}>
-              {pending ? "Verifying…" : "Verify"}
-            </Button>
-          </form>
-        )}
-        <FormError message={error} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function SessionsCard({ stepUpActive, onRevoked }: { stepUpActive: boolean; onRevoked: () => unknown }) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-
-  async function revokeAll() {
-    setPending(true);
-    setError(null);
-    try {
-      await api("/api/auth/sessions/revoke-all", { method: "POST" });
-      setCsrfToken(null);
-      onRevoked();
-    } catch (err) {
-      setError(errorMessage(err));
-      setPending(false);
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sessions</CardTitle>
-        <CardDescription>Sign out everywhere, including other browsers and devices.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        <div>
-          <Button
-            variant="destructive"
-            onClick={revokeAll}
-            disabled={!stepUpActive || pending}
-            aria-busy={pending || undefined}
-          >
-            {pending ? "Revoking…" : "Revoke all sessions"}
-          </Button>
-        </div>
-        {!stepUpActive && <p className="text-muted-foreground text-xs">Requires step-up verification.</p>}
-        <FormError message={error} />
-      </CardContent>
-    </Card>
+    <ul className="divide-y">
+      {transfers.map((t) => {
+        const outgoing = t.direction === "OUTGOING";
+        const counterparty = outgoing ? t.destination : t.source;
+        return (
+          <li key={t.id}>
+            <Link
+              href={`/account/transfers/${t.id}`}
+              className="hover:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-3"
+            >
+              <span className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-full" aria-hidden>
+                {outgoing ? <ArrowUpRight className="size-4" /> : <ArrowDownLeft className="size-4" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">
+                  {outgoing ? "To" : "From"} {counterparty.holder}
+                </span>
+                <span className="text-muted-foreground block truncate text-xs">
+                  {counterparty.bank} · {new Date(t.createdAt).toLocaleString()}
+                  {t.reference ? ` · ${t.reference}` : ""}
+                </span>
+                <TransferStatus state={t.state} className="mt-1 sm:hidden" />
+              </span>
+              <span className="flex flex-col items-end gap-1">
+                <span className="text-sm font-medium whitespace-nowrap tabular-nums">
+                  {signedMoney(outgoing ? -t.amount : t.amount, t.currency)}
+                </span>
+                <TransferStatus state={t.state} className="hidden sm:inline-flex" />
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

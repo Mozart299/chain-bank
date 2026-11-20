@@ -36,6 +36,12 @@ public class AuthService {
     SessionService sessions;
 
     @Inject
+    TotpVerifier totp;
+
+    @Inject
+    dev.chainbank.api.ledger.AccountService accounts;
+
+    @Inject
     RateLimiter limiter;
 
     @Inject
@@ -113,6 +119,7 @@ public class AuthService {
                 ps.executeUpdate();
             }
             audit.record(c, user.id(), "USER_ACTIVATED", "USER", user.id().toString(), Map.of("mfa", "TOTP"));
+            accounts.ensureDefaultAccount(c, user.id());
             return true;
         });
         if (!ok) {
@@ -195,26 +202,8 @@ public class AuthService {
         throw invalidCredentials();
     }
 
-    /**
-     * Verifies the code and atomically records its time step. The conditional UPDATE means two
-     * concurrent requests with the same code cannot both succeed.
-     */
     private boolean consumeTotp(Connection c, UserRow user, String code) throws SQLException {
-        if (user.totpCipher() == null) {
-            return false;
-        }
-        byte[] secret = cipher.decrypt(user.totpCipher(), user.id());
-        long step = Totp.verify(secret, code, clock.now(), user.totpLastStep());
-        if (step < 0) {
-            return false;
-        }
-        try (PreparedStatement ps = c.prepareStatement(
-                "UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?")) {
-            ps.setLong(1, step);
-            ps.setObject(2, user.id());
-            ps.setLong(3, step);
-            return ps.executeUpdate() == 1;
-        }
+        return totp.consume(c, user.id(), code);
     }
 
     private static UUID institutionId(Connection c, String code) throws SQLException {

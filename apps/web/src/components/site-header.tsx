@@ -13,21 +13,34 @@ export function SiteHeader() {
   const { me, status, signOut } = useSession();
   const pathname = usePathname();
 
-  const navLink = (href: string, label: string) => (
-    <Link
-      href={href}
-      aria-current={pathname === href ? "page" : undefined}
-      className={cn(buttonVariants({ variant: "ghost", size: "sm" }), pathname === href && "bg-muted")}
-    >
-      {label}
-    </Link>
-  );
+  const navLink = (href: string, label: string) => {
+    const active =
+      href === "/"
+        ? pathname === "/"
+        : pathname === href || pathname.startsWith(`${href}/`);
+    return (
+      <Link
+        href={href}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          active && "bg-muted",
+        )}
+      >
+        {label}
+      </Link>
+    );
+  };
 
   return (
     <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4">
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2 font-semibold" aria-label="ChainBank home">
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-semibold"
+            aria-label="ChainBank home"
+          >
             <Landmark className="size-5" aria-hidden />
             <span>ChainBank</span>
           </Link>
@@ -41,7 +54,11 @@ export function SiteHeader() {
           {status === "authenticated" && me ? (
             <>
               {navLink("/account", "Account")}
-              <span className="text-muted-foreground hidden px-2 text-sm md:inline">{me.displayName}</span>
+              {me.roles.includes("BANK_OPERATOR") &&
+                navLink("/operator", "Reviews")}
+              <span className="text-muted-foreground hidden px-2 text-sm md:inline">
+                {me.displayName}
+              </span>
               <Button variant="outline" size="sm" onClick={signOut}>
                 <LogOut aria-hidden />
                 Sign out
@@ -59,6 +76,24 @@ export function SiteHeader() {
             <span className="w-32" aria-hidden />
           )}
         </nav>
+      </div>
+    </header>
+  );
+}
+
+/** Static stand-in rendered during prerendering, before the URL and session are known. */
+export function SiteHeaderFallback() {
+  return (
+    <header className="bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
+      <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-3 px-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2 font-semibold"
+          aria-label="ChainBank home"
+        >
+          <Landmark className="size-5" aria-hidden />
+          <span>ChainBank</span>
+        </Link>
       </div>
     </header>
   );
