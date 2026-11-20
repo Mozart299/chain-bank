@@ -3,7 +3,11 @@
 // register -> TOTP confirm -> login -> me -> CSRF enforced -> wallet challenge -> sign -> verify
 // -> replay rejected -> cross-bank transfer -> TOTP approval -> idempotent replay -> on-chain
 // settlement reconciled -> balances -> logout -> session dead.
+import { spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
@@ -75,7 +79,7 @@ async function call(path, { method = "GET", body, cookie, csrf } = {}) {
   return { status: res.status, json, headers: res.headers };
 }
 
-console.log("ChainBank end-to-end (auth, wallet, transfers, settlement)");
+console.log("ChainBank end-to-end (auth, wallet, transfers, settlement, audit)");
 
 const email = `e2e-${randomUUID().slice(0, 8)}@example.test`;
 const password = "e2e correct horse battery staple";
@@ -202,6 +206,69 @@ const after1 = (await call("/api/accounts", { cookie })).json?.[0];
 const after2 = (await call("/api/accounts", { cookie: payeeCookie })).json?.[0];
 expect(after1?.availableBalance === 9_950_000, "payer charged exactly once", after1?.availableBalance);
 expect(after2?.availableBalance === 10_050_000, "payee credited", after2?.availableBalance);
+
+// --- Phase 4: audit batch committed on-chain and verified independently ---------------------------
+const DEMO_SECRET = "CHAINBANKDEMOTOTPSECRETXUGX23456";
+const DEMO_PASSWORD = process.env.CHAINBANK_DEMO_PASSWORD ?? "chainbank-demo-password";
+
+/** Demo users share one TOTP secret and may have used recent steps already: try fresh steps until one is accepted. */
+async function demoLogin(email) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const step = currentStep() + attempt;
+    while (currentStep() + 1 < step) await new Promise((r) => setTimeout(r, 1000));
+    const res = await call("/api/auth/login", { method: "POST", body: { email, password: DEMO_PASSWORD, code: totp(DEMO_SECRET, step) } });
+    if (res.status === 204) {
+      return { cookie: /cb_session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1], csrf: res.headers.get("x-csrf-token"), step };
+    }
+  }
+  return null;
+}
+async function demoStepUp(session) {
+  for (let step = session.step + 1; step <= session.step + 3; step++) {
+    while (currentStep() + 1 < step) await new Promise((r) => setTimeout(r, 1000));
+    const res = await call("/api/auth/step-up", { method: "POST", cookie: session.cookie, csrf: session.csrf, body: { code: totp(DEMO_SECRET, step) } });
+    if (res.status === 204) return true;
+  }
+  return false;
+}
+
+const admin = await demoLogin("sam.admin@chainbank.demo");
+expect(admin && (await demoStepUp(admin)), "admin signs in with step-up");
+const sealed = await call("/api/audit/batches/seal", { method: "POST", cookie: admin?.cookie, csrf: admin?.csrf });
+const batchId = sealed.json?.batchId;
+expect(sealed.status === 200 && batchId > 0, "admin seals an audit checkpoint", sealed.status);
+
+const auditor = await demoLogin("aria.audit@chainbank.demo");
+let batch = null;
+const anchorDeadline = Date.now() + 90_000;
+while (Date.now() < anchorDeadline) {
+  const list = await call("/api/audit/batches", { cookie: auditor?.cookie });
+  batch = list.json?.find((b) => b.id === batchId);
+  if (batch?.status === "COMMITTED" || batch?.status === "FAILED") break;
+  await new Promise((r) => setTimeout(r, 1000));
+}
+expect(batch?.status === "COMMITTED", "batch Merkle root committed on-chain with finality", batch?.status ?? "timeout");
+
+const status = await call("/api/admin/chain", { cookie: auditor?.cookie });
+const exported = await call(`/api/audit/batches/${batchId}/export`, { cookie: auditor?.cookie });
+expect(exported.status === 200 && exported.json?.events?.length > 0, "auditor downloads the batch export", exported.status);
+
+const dir = mkdtempSync(join(tmpdir(), "chainbank-audit-"));
+const exportFile = join(dir, `batch-${batchId}.json`);
+writeFileSync(exportFile, JSON.stringify(exported.json));
+const verifier = new URL("../tools/audit-verifier/verify.mjs", import.meta.url).pathname;
+const rpcUrl = process.env.CHAIN_RPC_URL ?? "http://127.0.0.1:8545";
+const run = (f) =>
+  spawnSync(process.execPath, [verifier, f, "--rpc", rpcUrl, "--contract", status.json?.auditAnchor ?? ""], { encoding: "utf8" });
+const good = run(exportFile);
+expect(good.status === 0, "independent verifier accepts the untouched export", good.stdout.trim().split("\n").pop());
+
+const tampered = structuredClone(exported.json);
+tampered.events[0].action = "NOTHING_TO_SEE";
+const tamperedFile = join(dir, `batch-${batchId}-tampered.json`);
+writeFileSync(tamperedFile, JSON.stringify(tampered));
+const bad = run(tamperedFile);
+expect(bad.status === 1 && /\u2717 event hashes/.test(bad.stdout), "independent verifier rejects an edited event", bad.stdout.trim().split("\n").pop());
 
 const logout = await call("/api/auth/logout", { method: "POST", cookie, csrf });
 expect(logout.status === 204, "logout", logout.status);

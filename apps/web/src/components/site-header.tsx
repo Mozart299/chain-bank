@@ -57,6 +57,8 @@ export function SiteHeader() {
               {navLink("/account", "Account")}
               {me.roles.includes("BANK_OPERATOR") &&
                 navLink("/operator", "Reviews")}
+              {me.roles.some((r) => ["AUDITOR", "COMPLIANCE_REVIEWER", "SYSTEM_ADMIN"].includes(r)) &&
+                navLink("/audit", "Audit")}
               {me.roles.includes("SYSTEM_ADMIN") && navLink("/admin", "Admin")}
               <span className="text-muted-foreground hidden px-2 text-sm md:inline">
                 {me.displayName}

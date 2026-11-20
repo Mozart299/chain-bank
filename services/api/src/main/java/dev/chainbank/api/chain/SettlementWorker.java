@@ -65,6 +65,9 @@ public class SettlementWorker {
     SettlementReconciler reconciler;
 
     @Inject
+    dev.chainbank.api.audit.AuditBatcher auditBatcher;
+
+    @Inject
     ChainbankConfig config;
 
     @Inject
@@ -103,6 +106,12 @@ public class SettlementWorker {
         confirm();
         reconciler.index();
         reconciler.reconcile();
+        // The same single chain writer anchors audit batches, so the gateway key's nonces never collide.
+        if (deployment.ensureAnchorDeployed().isPresent()) {
+            auditBatcher.sealIfDue();
+            auditBatcher.anchor();
+            auditBatcher.confirm();
+        }
     }
 
     // --- 1. submit ---------------------------------------------------------------------------------
@@ -311,6 +320,8 @@ public class SettlementWorker {
                 }
                 SettlementReconciler.resolve(c, tx.transferId(), "REORG",
                         "Settlement became final in block " + block + " after the reorg", now);
+                SettlementReconciler.resolve(c, tx.transferId(), "MISSING_ON_CHAIN", "Settled after retry in block " + block, now);
+                SettlementReconciler.resolve(c, tx.transferId(), "REVERTED", "Settled after retry in block " + block, now);
             }
             return null;
         });

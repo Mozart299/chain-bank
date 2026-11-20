@@ -85,11 +85,15 @@ export type ReconciliationException = {
   note: string | null;
   createdAt: string;
   resolvedAt: string | null;
+  resolutionNote: string | null;
+  retryCount: number;
+  retryable: boolean;
 };
 
 export type ChainStatus = {
   chainId: number;
   contract: string | null;
+  auditAnchor: string | null;
   paused: boolean;
   latestBlock: number;
   confirmations: number;
@@ -153,4 +157,24 @@ export const REASONS: Record<string, string> = {
   BOOK_TRANSFER: "Both accounts are at the same bank, so it completed instantly.",
   REORG: "The block holding the settlement was replaced (chain reorganisation); it is being re-confirmed.",
   REVERTED: "The settlement transaction was rejected on-chain; the bank is investigating.",
+};
+
+export type AuditBatch = {
+  id: number;
+  firstEventId: number;
+  lastEventId: number;
+  eventCount: number;
+  merkleRoot: string;
+  status: "SEALED" | "SUBMITTED" | "COMMITTED" | "FAILED";
+  contract: string | null;
+  txHash: string | null;
+  blockNumber: number | null;
+  createdAt: string;
+  committedAt: string | null;
+};
+
+export type BatchVerification = {
+  batchId: number;
+  valid: boolean;
+  checks: { name: string; ok: boolean; detail: string }[];
 };

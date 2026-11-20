@@ -44,24 +44,72 @@ public class SettlementDeployment {
     AuditLog audit;
 
     private volatile String address;
+    private volatile String anchorAddress;
 
     public record Institution(String code, String pseudonym, String wallet) {
     }
 
     public Optional<String> address() {
         if (address == null) {
-            address = db.tx(c -> {
-                try (PreparedStatement ps = c.prepareStatement(
-                        "SELECT address FROM chain_deployments WHERE chain_id = ? AND name = ?")) {
-                    ps.setLong(1, chain.chainId());
-                    ps.setString(2, SettlementAbi.NAME);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        return rs.next() ? rs.getString(1) : null;
-                    }
-                }
-            });
+            address = lookup(SettlementAbi.NAME);
         }
         return Optional.ofNullable(address);
+    }
+
+    /** Address of the AuditAnchor contract (Phase 4), if deployed. */
+    public Optional<String> anchorAddress() {
+        if (anchorAddress == null) {
+            anchorAddress = lookup(AuditAnchorAbi.NAME);
+        }
+        return Optional.ofNullable(anchorAddress);
+    }
+
+    private String lookup(String name) {
+        return db.tx(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT address FROM chain_deployments WHERE chain_id = ? AND name = ?")) {
+                ps.setLong(1, chain.chainId());
+                ps.setString(2, name);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? rs.getString(1) : null;
+                }
+            }
+        });
+    }
+
+    /** Deploys the AuditAnchor if allowed and not yet deployed; grants the gateway COMMITTER_ROLE. */
+    public synchronized Optional<String> ensureAnchorDeployed() {
+        Optional<String> existing = anchorAddress();
+        if (existing.isPresent() || !config.chain().autoDeploy()) {
+            return existing;
+        }
+        Credentials admin = chain.admin().orElseThrow(() -> new IllegalStateException("auto-deploy needs CHAIN_ADMIN_KEY"));
+        Credentials gateway = chain.settler().orElseThrow(() -> new IllegalStateException("auto-deploy needs CHAIN_SETTLER_KEY"));
+        chain.verifyChainId();
+        String data = AuditAnchorAbi.deployData(admin.getAddress());
+        BigInteger gas = chain.estimateGas(admin.getAddress(), null, data).multiply(BigInteger.valueOf(12)).divide(BigInteger.TEN);
+        TransactionReceipt deployed = chain.transactAndWait(admin, null, data, gas);
+        String contract = deployed.getContractAddress().toLowerCase();
+        chain.transactAndWait(admin, contract, AuditAnchorAbi.grantCommitter(gateway.getAddress()), BigInteger.valueOf(200_000));
+        db.tx(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO chain_deployments (chain_id, name, address, abi_version, tx_hash, block_number)
+                    VALUES (?, ?, ?, ?, ?, ?)""")) {
+                ps.setLong(1, chain.chainId());
+                ps.setString(2, AuditAnchorAbi.NAME);
+                ps.setString(3, contract);
+                ps.setInt(4, AuditAnchorAbi.abiVersion());
+                ps.setString(5, deployed.getTransactionHash());
+                ps.setLong(6, deployed.getBlockNumber().longValue());
+                ps.executeUpdate();
+            }
+            audit.record(c, null, "AUDIT_ANCHOR_DEPLOYED", "CHAIN", contract,
+                    Map.of("chainId", Long.toString(chain.chainId())));
+            return null;
+        });
+        anchorAddress = contract;
+        LOG.infof("Deployed AuditAnchor at %s on chain %d", contract, chain.chainId());
+        return Optional.of(contract);
     }
 
     /** Deploys if allowed and not yet deployed. Never redeploys over an existing record. */

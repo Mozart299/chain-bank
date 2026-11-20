@@ -26,6 +26,19 @@ public interface ChainbankConfig {
 
     Transfers transfers();
 
+    Audit audit();
+
+    /** Audit batch commitments (ADR 0007, spec section 16 item 4). */
+    interface Audit {
+        /** Seal a batch once this many events are pending... */
+        @WithDefault("100")
+        int batchSize();
+
+        /** ...or once the oldest pending event is this old, whichever comes first. */
+        @WithDefault("PT10M")
+        Duration maxAge();
+    }
+
     /** Spec section 16 decisions, recorded in ADR 0005. All amounts in xUGX minor units. */
     interface Transfers {
         /** Amounts above this need the customer's step-up approval. */

@@ -26,28 +26,13 @@ import org.web3j.protocol.http.HttpService;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.response.Response;
 
-import dev.chainbank.api.ApiTestBase;
 
 /**
  * Phase 3 exit condition: transfers reconcile with contract events. Runs against a real Anvil node,
  * driving the worker step by step (the scheduler is off in tests).
  */
 @QuarkusTest
-class SettlementFlowTest extends ApiTestBase {
-
-    @Inject
-    SettlementWorker worker;
-
-    @Inject
-    SettlementReconciler reconciler;
-
-    @Inject
-    SettlementDeployment deployment;
-
-    @Inject
-    ChainClient chain;
-
-    final HttpService rpc = new HttpService(AnvilResource.rpcUrl());
+class SettlementFlowTest extends ChainTestBase {
 
     @BeforeEach
     void deployed() {
@@ -290,53 +275,6 @@ class SettlementFlowTest extends ApiTestBase {
 
     // --- helpers ---------------------------------------------------------------------------------
 
-    /**
-     * Anvil mines asynchronously: eth_sendRawTransaction returns before the block exists. Wait (up to
-     * 5 s) until every open settlement transaction has a receipt. Called before confirming AND before
-     * mining, so an explicit evm_mine never swallows a still-pending transaction into its own block
-     * (which would silently count one confirmation fewer).
-     */
-    private void awaitReceipts() {
-        long deadline = System.currentTimeMillis() + 5_000;
-        while (System.currentTimeMillis() < deadline) {
-            boolean allMined = true;
-            try (var c = dataSource.getConnection(); var ps = c.prepareStatement(
-                    "SELECT tx_hash FROM chain_txs WHERE status IN ('SUBMITTED', 'MINED', 'REORGED')"); var rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    if (chain.receipt(rs.getString(1)).isEmpty()) {
-                        allMined = false;
-                    }
-                }
-            } catch (java.sql.SQLException e) {
-                throw new RuntimeException(e);
-            }
-            if (allMined) {
-                return;
-            }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-        }
-    }
-
-    private void confirm() {
-        awaitReceipts();
-        worker.confirm();
-    }
-
-    private void settleFully() {
-        worker.submit();
-        mine(1);
-        confirm();
-        mine(1);
-        confirm();
-        reconciler.index();
-        reconciler.reconcile();
-    }
-
     private void assertPositionsMatch() {
         for (SettlementReconciler.Position p : reconciler.positions()) {
             assertTrue(p.matched(), () -> "position " + p + "\n" + crossBankDump());
@@ -367,33 +305,5 @@ class SettlementFlowTest extends ApiTestBase {
     private BigInteger onChainBalance(String bank) {
         String wallet = deployment.institutions().stream().filter(i -> i.code().equals(bank)).findFirst().orElseThrow().wallet();
         return SettlementAbi.decodeUint(chain.call(deployment.address().orElseThrow(), SettlementAbi.balanceOfCall(wallet)));
-    }
-
-    private String state(Session s, String id) {
-        return as(s).get("/api/transfers/" + id).then().statusCode(200).extract().path("state");
-    }
-
-    private void mine(int blocks) {
-        awaitReceipts();
-        try {
-            for (int i = 0; i < blocks; i++) {
-                new Request<>("evm_mine", List.of(), rpc, VoidResponse.class).send();
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private String queryString(String sql, Object... args) {
-        try (var c = dataSource.getConnection(); var ps = c.prepareStatement(sql)) {
-            for (int i = 0; i < args.length; i++) {
-                ps.setObject(i + 1, args[i]);
-            }
-            try (var rs = ps.executeQuery()) {
-                return rs.next() ? rs.getString(1) : null;
-            }
-        } catch (java.sql.SQLException e) {
-            throw new RuntimeException(e);
-        }
     }
 }

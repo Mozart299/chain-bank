@@ -1,10 +1,26 @@
 "use client";
 
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { FormError } from "@/components/form-error";
+import { useSession } from "@/components/session-provider";
+import { stepUpActive } from "@/components/step-up-card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMoney, type Position, type ReconciliationException } from "@/lib/banking";
 import { api, errorMessage } from "@/lib/client";
@@ -14,6 +30,9 @@ import { api, errorMessage } from "@/lib/client";
  * Refreshes every 5 seconds.
  */
 export function SettlementOverview() {
+  const { me } = useSession();
+  const canAct =
+    (me?.roles.includes("BANK_OPERATOR") || me?.roles.includes("SYSTEM_ADMIN")) && stepUpActive(me?.stepUpValidUntil);
   const [positions, setPositions] = useState<Position[] | null>(null);
   const [exceptions, setExceptions] = useState<ReconciliationException[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +126,10 @@ export function SettlementOverview() {
             Reconciliation exceptions
             {open.length > 0 && <Badge variant="destructive">{open.length} open</Badge>}
           </CardTitle>
-          <CardDescription>On-chain events and ledger entries that did not line up.</CardDescription>
+          <CardDescription>
+            On-chain events and ledger entries that did not line up.
+            {open.length > 0 && !canAct && " Operators can resolve or retry them after a step-up verification."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {!exceptions ? (
@@ -124,12 +146,96 @@ export function SettlementOverview() {
                     <span className="text-muted-foreground text-xs">{new Date(e.createdAt).toLocaleString()}</span>
                   </div>
                   {e.note && <p className="text-muted-foreground break-words">{e.note}</p>}
+                  {e.resolutionNote && (
+                    <p className="text-muted-foreground break-words">Resolution: {e.resolutionNote}</p>
+                  )}
+                  {e.status !== "RESOLVED" && canAct && <ExceptionActions exception={e} onDone={load} />}
                 </li>
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function ExceptionActions({ exception, onDone }: { exception: ReconciliationException; onDone: () => Promise<void> }) {
+  const [note, setNote] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  async function retry() {
+    setPending(true);
+    try {
+      await api(`/api/reconciliation/exceptions/${exception.id}/retry`, { method: "POST" });
+      toast.success("Settlement queued again. The exception closes once it is final.");
+      await onDone();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function resolve() {
+    setPending(true);
+    setError(null);
+    try {
+      await api(`/api/reconciliation/exceptions/${exception.id}/resolve`, { method: "POST", body: { note } });
+      toast.success("Exception resolved.");
+      setOpen(false);
+      await onDone();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 pt-1">
+      {exception.retryable && (
+        <Button size="sm" variant="outline" onClick={retry} disabled={pending}>
+          <RotateCw aria-hidden /> Retry settlement
+        </Button>
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button size="sm" variant="outline">
+            Resolve…
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resolve exception</DialogTitle>
+            <DialogDescription>
+              Record what you found and how it was handled. The note is kept in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor={`note-${exception.id}`}>Resolution note</Label>
+            <Textarea
+              id={`note-${exception.id}`}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              minLength={5}
+              maxLength={500}
+              rows={4}
+            />
+          </div>
+          <FormError message={error} />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={resolve} disabled={pending || note.trim().length < 5}>
+              {pending ? "Saving…" : "Resolve"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

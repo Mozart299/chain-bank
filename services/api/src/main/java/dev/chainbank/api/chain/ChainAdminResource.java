@@ -21,8 +21,8 @@ import dev.chainbank.api.platform.Db;
 @Produces(MediaType.APPLICATION_JSON)
 public class ChainAdminResource {
 
-    public record ChainStatus(long chainId, String contract, boolean paused, long latestBlock, int confirmations,
-            long pendingOutbox, long openTransactions) {
+    public record ChainStatus(long chainId, String contract, String auditAnchor, boolean paused, long latestBlock,
+            int confirmations, long pendingOutbox, long openTransactions) {
     }
 
     @Inject
@@ -57,8 +57,8 @@ public class ChainAdminResource {
                 return new long[] { rs.getLong(1), rs.getLong(2) };
             }
         });
-        return new ChainStatus(chain.chainId(), contract, paused, chain.latestBlock(), config.chain().confirmations(),
-                backlog[0], backlog[1]);
+        return new ChainStatus(chain.chainId(), contract, deployment.anchorAddress().orElse(null), paused,
+                chain.latestBlock(), config.chain().confirmations(), backlog[0], backlog[1]);
     }
 
     /** Spec section 8.4: controlled emergency pause. Settlements queue off-chain while paused. */

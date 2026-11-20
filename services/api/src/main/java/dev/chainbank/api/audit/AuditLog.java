@@ -6,6 +6,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -135,13 +137,61 @@ public class AuditLog {
 
     private static byte[] hash(byte[] prev, Instant at, UUID actor, String action, String resourceType,
             String resourceId, String cid, String detailsJson) {
-        // Length-prefixed fields so no two different events can serialise to the same bytes.
+        return hashFields(prev == null ? "" : Crypto.hex(prev), at.toString(), actor == null ? "" : actor.toString(),
+                action, resourceType, resourceId == null ? "" : resourceId, cid == null ? "" : cid, detailsJson);
+    }
+
+    /**
+     * The event hash, exactly as specified for independent verifiers (ADR 0007): SHA-256 over the UTF-8
+     * bytes of each field written as {@code <length>:<value>|}, where length counts UTF-16 code units, in
+     * the order prevHash (lowercase hex or empty), occurredAt (ISO-8601), actorUserId, action,
+     * resourceType, resourceId, correlationId, details (canonical JSON, keys sorted). Length prefixes
+     * mean no two different events can serialise to the same bytes.
+     */
+    public static byte[] hashFields(String... fields) {
         StringBuilder sb = new StringBuilder();
-        for (String f : new String[] { prev == null ? "" : Crypto.hex(prev), at.toString(),
-                actor == null ? "" : actor.toString(), action, resourceType, resourceId == null ? "" : resourceId,
-                cid == null ? "" : cid, detailsJson }) {
+        for (String f : fields) {
             sb.append(f.length()).append(':').append(f).append('|');
         }
         return Crypto.sha256(sb.toString());
+    }
+
+    /** An audit event with every hashed field rendered exactly as it was hashed. */
+    public record ExportedEvent(long id, String prevHash, String occurredAt, String actorUserId, String action,
+            String resourceType, String resourceId, String correlationId, String details, String hash) {
+
+        public byte[] recomputeHash() {
+            return hashFields(prevHash, occurredAt, actorUserId, action, resourceType, resourceId, correlationId,
+                    details);
+        }
+    }
+
+    /** Events with {@code afterId < id <= lastId}, in id order, rendered for export and verification. */
+    public List<ExportedEvent> eventsInRange(Connection c, long afterId, long lastId) throws SQLException {
+        List<ExportedEvent> out = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT id, occurred_at, actor_user_id, action, resource_type, resource_id, correlation_id,
+                       details::text, prev_hash, hash
+                FROM audit_events WHERE id > ? AND id <= ? ORDER BY id""")) {
+            ps.setLong(1, afterId);
+            ps.setLong(2, lastId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    UUID actor = rs.getObject(3, UUID.class);
+                    byte[] prev = rs.getBytes(9);
+                    String details;
+                    try {
+                        details = canonical(mapper.readValue(rs.getString(8), DETAILS));
+                    } catch (JsonProcessingException e) {
+                        throw new IllegalStateException(e);
+                    }
+                    out.add(new ExportedEvent(rs.getLong(1), prev == null ? "" : Crypto.hex(prev),
+                            rs.getTimestamp(2).toInstant().toString(), actor == null ? "" : actor.toString(),
+                            rs.getString(4), rs.getString(5), rs.getString(6) == null ? "" : rs.getString(6),
+                            rs.getString(7) == null ? "" : rs.getString(7), details, Crypto.hex(rs.getBytes(10))));
+                }
+            }
+        }
+        return out;
     }
 }

@@ -27,6 +27,9 @@ The project is defined by **[docs/specification.md](docs/specification.md)**. Re
 - Changing the contract means running `pnpm --filter @chainbank/contracts export` and committing `services/api/src/main/resources/contracts/SettlementToken.json`, or CI fails. Bump `ABI_VERSION` if the interface changes.
 - Settlement tests run against a real Anvil node (Testcontainers, `AnvilResource`). Anvil mines asynchronously, so wait for receipts before calling `worker.confirm()` (see `SettlementFlowTest.confirm()`).
 - Never post committed test journals against real SETTLEMENT accounts. They're mirrored on-chain, and reconciliation will flag the difference.
+- Audit hashing is a published spec (ADR 0007), implemented twice on purpose: `AuditLog.hashFields` and `tools/audit-verifier/verify.mjs`. Change both together, or not at all, and keep the verifier free of imports from the API.
+- Only `SettlementWorker.runOnce()` signs transactions (settlement and audit anchors). Don't add another scheduled chain writer: nonces would collide.
+- Chain-driving tests extend `ChainTestBase`. Its `mine()` and `confirm()` wait for pending receipts, because Anvil mines asynchronously.
 - Smoke and e2e scripts target `127.0.0.1`, because another dev server may hold `localhost:3000` on IPv6.
 - shadcn/ui: components live in `apps/web/src/components/ui`. Add more with `pnpm dlx shadcn@4.23.0 add <name>` (the radix-nova preset). Check that the generated files import `cn` from `@/lib/utils`; the CLI once wrote `from "cn"`.
 - API security: every mutating request with a session needs `X-CSRF-Token`. Sensitive actions call `CurrentSession.requireStepUp()`. Record security events through `AuditLog` inside the same transaction.

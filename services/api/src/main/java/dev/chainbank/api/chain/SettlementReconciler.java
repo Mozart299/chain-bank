@@ -45,13 +45,16 @@ public class SettlementReconciler {
     @Inject
     AppClock clock;
 
+    @Inject
+    dev.chainbank.api.audit.AuditLog audit;
+
     public record Position(String institution, String pseudonym, String wallet, long offChainLedger,
             long outgoingUnsettled, long incomingUnsettled, long expectedOnChain, Long onChain, boolean matched,
             long asOfBlock) {
     }
 
     public record ReconciliationException(UUID id, UUID transferId, Long chainEventId, String kind, String status,
-            String note, Instant createdAt, Instant resolvedAt) {
+            String note, Instant createdAt, Instant resolvedAt, String resolutionNote, int retryCount, boolean retryable) {
     }
 
     /** Reads Settled logs from the last indexed block up to the newest final block. */
@@ -233,21 +236,116 @@ public class SettlementReconciler {
         return db.tx(c -> {
             List<ReconciliationException> out = new ArrayList<>();
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT id, transfer_id, chain_event_id, kind, status, note, created_at, resolved_at
-                    FROM reconciliation_exceptions """ + (openOnly ? " WHERE status <> 'RESOLVED' " : " ")
-                    + "ORDER BY created_at DESC LIMIT 200")) {
+                    SELECT id, transfer_id, chain_event_id, kind, status, note, created_at, resolved_at,
+                           resolution_note, retry_count
+                    FROM reconciliation_exceptions""" + (openOnly ? " WHERE status <> 'RESOLVED'" : "")
+                    + " ORDER BY created_at DESC LIMIT 200")) {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
-                        Timestamp resolved = rs.getTimestamp(8);
-                        long ev = rs.getLong(3);
-                        out.add(new ReconciliationException(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class),
-                                rs.wasNull() ? null : ev, rs.getString(4), rs.getString(5), rs.getString(6),
-                                rs.getTimestamp(7).toInstant(), resolved == null ? null : resolved.toInstant()));
+                        out.add(mapException(rs));
                     }
                 }
             }
             return out;
         });
+    }
+
+    private static ReconciliationException mapException(ResultSet rs) throws SQLException {
+        Timestamp resolved = rs.getTimestamp(8);
+        long ev = rs.getLong(3);
+        Long eventId = rs.wasNull() ? null : ev;
+        String kind = rs.getString(4);
+        String status = rs.getString(5);
+        UUID transferId = rs.getObject(2, UUID.class);
+        boolean retryable = transferId != null && !"RESOLVED".equals(status)
+                && ("MISSING_ON_CHAIN".equals(kind) || "REVERTED".equals(kind));
+        return new ReconciliationException(rs.getObject(1, UUID.class), transferId, eventId, kind, status,
+                rs.getString(6), rs.getTimestamp(7).toInstant(), resolved == null ? null : resolved.toInstant(),
+                rs.getString(9), rs.getInt(10), retryable);
+    }
+
+    /** An operator closes an exception after investigating it; the note is mandatory and audited. */
+    public ReconciliationException resolveManually(UUID exceptionId, UUID operator, String note) {
+        Instant now = clock.now();
+        return db.tx(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    UPDATE reconciliation_exceptions SET status = 'RESOLVED', resolved_at = ?, resolved_by = ?,
+                           resolution_note = ?
+                    WHERE id = ? AND status <> 'RESOLVED'""")) {
+                ps.setTimestamp(1, Timestamp.from(now));
+                ps.setObject(2, operator);
+                ps.setString(3, note);
+                ps.setObject(4, exceptionId);
+                if (ps.executeUpdate() != 1) {
+                    throw dev.chainbank.api.platform.ApiException.conflict("NOT_OPEN", "Exception not found or already resolved");
+                }
+            }
+            audit.record(c, operator, "RECON_EXCEPTION_RESOLVED", "RECON_EXCEPTION", exceptionId.toString(),
+                    java.util.Map.of("note", note));
+            return load(c, exceptionId);
+        });
+    }
+
+    /**
+     * Retries settlement for a dead outbox row (MISSING_ON_CHAIN) or a reverted transaction (REVERTED, only
+     * if the settlement id is still unused on-chain). The worker resolves the exception once the transfer is final.
+     */
+    public ReconciliationException retry(UUID exceptionId, UUID operator) {
+        Instant now = clock.now();
+        String contract = deployment.address().orElse(null);
+        return db.tx(c -> {
+            ReconciliationException ex = load(c, exceptionId);
+            if (!ex.retryable()) {
+                throw dev.chainbank.api.platform.ApiException.conflict("NOT_RETRYABLE",
+                        "Only open MISSING_ON_CHAIN or REVERTED exceptions can be retried");
+            }
+            if ("MISSING_ON_CHAIN".equals(ex.kind())) {
+                try (PreparedStatement ps = c.prepareStatement("""
+                        UPDATE outbox SET status = 'PENDING', attempts = 0, next_attempt_at = ?, last_error = NULL
+                        WHERE aggregate_id = ? AND status = 'DEAD'""")) {
+                    ps.setTimestamp(1, Timestamp.from(now));
+                    ps.setObject(2, ex.transferId());
+                    ps.executeUpdate();
+                }
+            } else {
+                String settlementId = SettlementAbi.settlementId(ex.transferId());
+                if (contract != null && SettlementAbi.decodeBool(chain.call(contract, SettlementAbi.settledCall(settlementId)))) {
+                    throw dev.chainbank.api.platform.ApiException.conflict("ALREADY_SETTLED",
+                            "This transfer is already settled on-chain; resolve the exception instead");
+                }
+                try (PreparedStatement ps = c.prepareStatement("""
+                        INSERT INTO outbox (aggregate_type, aggregate_id, event_type, payload, created_at, next_attempt_at)
+                        SELECT aggregate_type, aggregate_id, event_type, payload, ?, ? FROM outbox
+                        WHERE aggregate_id = ? ORDER BY created_at LIMIT 1""")) {
+                    ps.setTimestamp(1, Timestamp.from(now));
+                    ps.setTimestamp(2, Timestamp.from(now));
+                    ps.setObject(3, ex.transferId());
+                    ps.executeUpdate();
+                }
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE reconciliation_exceptions SET status = 'RETRYING', retry_count = retry_count + 1 WHERE id = ?")) {
+                ps.setObject(1, exceptionId);
+                ps.executeUpdate();
+            }
+            audit.record(c, operator, "RECON_EXCEPTION_RETRIED", "RECON_EXCEPTION", exceptionId.toString(),
+                    java.util.Map.of("kind", ex.kind()));
+            return load(c, exceptionId);
+        });
+    }
+
+    private static ReconciliationException load(Connection c, UUID id) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT id, transfer_id, chain_event_id, kind, status, note, created_at, resolved_at, resolution_note,
+                       retry_count FROM reconciliation_exceptions WHERE id = ?""")) {
+            ps.setObject(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw dev.chainbank.api.platform.ApiException.notFound("Exception not found");
+                }
+                return mapException(rs);
+            }
+        }
     }
 
     long cursor() {

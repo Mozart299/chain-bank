@@ -16,6 +16,7 @@ The project is guided by the **[specification](docs/specification.md)**. Decisio
 | `packages/shared` | Shared API schemas and generated contract types (later phases) |
 | `infra` | Docker Compose: PostgreSQL 17, Anvil local chain, API, web |
 | `docs` | Specification, ADRs, threat model |
+| `tools/audit-verifier` | Standalone verifier for exported audit batches |
 
 ## Quick start
 
@@ -71,6 +72,20 @@ Every customer gets a current account with **xUGX 10,000,000** of fictional fund
 
 The daily limit is **5,000,000** per customer. The rules and the accounting are in [ADR 0005](docs/adr/0005-transfers-limits-and-accounting.md).
 
+## Verify the audit trail yourself
+
+Every security and money event goes into a hash-chained audit log. Every 100 events, or every 10 minutes, the log is sealed into a Merkle root and committed to the `AuditAnchor` contract. After that, not even the bank can rewrite history unnoticed.
+
+1. Sign in as `aria.audit@chainbank.demo` and open **Audit**. Click **Verify** on a batch to run five checks: event hashes, hash chain, Merkle root, on-chain commitment and finality.
+2. Click **Download export**, then check the batch yourself without trusting ChainBank:
+   ```sh
+   node tools/audit-verifier/verify.mjs chainbank-audit-batch-1.json --rpc http://127.0.0.1:8545 --contract <anchor address shown on the Audit page>
+   ```
+   Edit any event in the file and run it again: the verifier reports which check fails and exits with status 1.
+3. Admins (`sam.admin@chainbank.demo`) can **Seal checkpoint now** on the same page, after verifying with a code.
+
+How it works and the trust model: [ADR 0007](docs/adr/0007-audit-commitments.md) and [tools/audit-verifier](tools/audit-verifier/README.md).
+
 ## Seed data
 
 Migration `V2` creates two fictional banks: **BANK_A** (Nile Demo Bank, `INST-A`) and **BANK_B** (Rwenzori Demo Bank, `INST-B`). Each has equity, settlement, and suspense accounts. An opening journal gives each bank 1,000,000,000 xUGX of settlement capacity.
@@ -83,5 +98,5 @@ Migration `V2` creates two fictional banks: **BANK_A** (Nile Demo Bank, `INST-A`
 | 1 Authentication: sessions, roles, TOTP, wallet challenge and link | done |
 | 2 Core banking: accounts, transfers, state machine, idempotency | done |
 | 3 Blockchain: permissioned settlement contract, gateway, receipts | done |
-| 4 Audit and UX: dashboards, batch commitments, exceptions | next |
-| 5 Hardening: threat review, failure exercises, testnet | |
+| 4 Audit and UX: dashboards, batch commitments, exceptions | done |
+| 5 Hardening: threat review, failure exercises, testnet | next |
