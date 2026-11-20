@@ -2,9 +2,9 @@
 # Phase 0 smoke test against a running stack (make up). Exits non-zero on any failure.
 set -euo pipefail
 
-API=${API_URL:-http://localhost:8080}
-WEB=${WEB_URL:-http://localhost:3000}
-CHAIN=${CHAIN_RPC_URL:-http://localhost:8545}
+API=${API_URL:-http://127.0.0.1:8080}
+WEB=${WEB_URL:-http://127.0.0.1:3000}
+CHAIN=${CHAIN_RPC_URL:-http://127.0.0.1:8545}
 
 pass() { printf '  \033[32mok\033[0m  %s\n' "$1"; }
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; exit 1; }

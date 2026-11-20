@@ -36,6 +36,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @chainbank/contracts test
+      - name: Contract ABI exported to the API is up to date
+        run: |
+          pnpm --filter @chainbank/contracts export
+          git diff --exit-code services/api/src/main/resources/contracts/
       - run: pnpm --filter @chainbank/web lint
       - run: pnpm --filter @chainbank/web typecheck
       - run: pnpm --filter @chainbank/web build

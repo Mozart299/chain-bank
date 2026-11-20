@@ -23,7 +23,11 @@ The project is defined by **[docs/specification.md](docs/specification.md)**. Re
 
 - `apps/web` uses Next.js 16 with `cacheComponents`. Read `apps/web/node_modules/next/dist/docs/` before relying on Next APIs from memory. Request-time data needs `await connection()` inside a `<Suspense>` boundary.
 - Hardhat 3: use `network.create()`, not `network.connect()`, which is deprecated.
-- Java 17: current web3j releases need Java 21. Ethereum signature recovery is in `wallet/EthSignatures.java` (BouncyCastle).
+- The API is on Java 21 (web3j 6). Run the Makefile targets or set `JAVA_HOME` to a JDK 21; one is unpacked in `~/.jdks`. web3j uses Jackson 3, which needs `jackson-annotations` 2.22, pinned in the pom. Don't remove that pin.
+- Changing the contract means running `pnpm --filter @chainbank/contracts export` and committing `services/api/src/main/resources/contracts/SettlementToken.json`, or CI fails. Bump `ABI_VERSION` if the interface changes.
+- Settlement tests run against a real Anvil node (Testcontainers, `AnvilResource`). Anvil mines asynchronously, so wait for receipts before calling `worker.confirm()` (see `SettlementFlowTest.confirm()`).
+- Never post committed test journals against real SETTLEMENT accounts. They're mirrored on-chain, and reconciliation will flag the difference.
+- Smoke and e2e scripts target `127.0.0.1`, because another dev server may hold `localhost:3000` on IPv6.
 - shadcn/ui: components live in `apps/web/src/components/ui`. Add more with `pnpm dlx shadcn@4.23.0 add <name>` (the radix-nova preset). Check that the generated files import `cn` from `@/lib/utils`; the CLI once wrote `from "cn"`.
 - API security: every mutating request with a session needs `X-CSRF-Token`. Sensitive actions call `CurrentSession.requireStepUp()`. Record security events through `AuditLog` inside the same transaction.
 - Next 16 + `cacheComponents`: a client component that calls `usePathname`/`useParams` above a dynamic route (`[id]`) must be inside `<Suspense>`, or `next build` fails. The header and the account shell are wrapped for this reason.

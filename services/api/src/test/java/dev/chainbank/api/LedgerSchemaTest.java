@@ -25,6 +25,7 @@ class LedgerSchemaTest {
     static final String BANK_A_EQUITY = "00000000-0000-0000-0001-00000000000a";
     static final String BANK_A_SETTLEMENT = "00000000-0000-0000-0002-00000000000a";
     static final String BANK_A_SUSPENSE = "00000000-0000-0000-0003-00000000000a";
+    static final String TEST_SCRATCH = "00000000-0000-0000-00ee-00000000000a";
 
     @Inject
     DataSource dataSource;
@@ -37,11 +38,22 @@ class LedgerSchemaTest {
 
     @Test
     void balancedJournalCommitsAndUpdatesProjection() throws SQLException {
+        // Committed postings must not touch real settlement accounts: those are mirrored on-chain, and the
+        // Phase 3 reconciliation would (correctly) flag an off-chain-only change. Use a scratch account.
+        inTx(c -> {
+            try (var ps = c.prepareStatement("""
+                    INSERT INTO accounts (id, institution_id, account_type, normal_side, allow_negative, currency, name)
+                    VALUES (?::uuid, '00000000-0000-0000-0000-00000000000a', 'SUSPENSE', 'DEBIT', true, 'xUGX', 'Test scratch')
+                    ON CONFLICT (id) DO NOTHING""")) {
+                ps.setString(1, TEST_SCRATCH);
+                ps.executeUpdate();
+            }
+        });
         long before = balance(BANK_A_SUSPENSE);
         inTx(c -> {
             UUID j = journal(c);
             line(c, j, BANK_A_SUSPENSE, 500, 0);
-            line(c, j, BANK_A_SETTLEMENT, 0, 500);
+            line(c, j, TEST_SCRATCH, 0, 500);
         });
         assertEquals(before + 500, balance(BANK_A_SUSPENSE));
     }

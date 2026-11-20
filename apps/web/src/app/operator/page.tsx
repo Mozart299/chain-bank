@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { FormError } from "@/components/form-error";
 import { useSession } from "@/components/session-provider";
+import { SettlementOverview } from "@/components/settlement-overview";
 import { StepUpCard, stepUpActive } from "@/components/step-up-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,6 +85,9 @@ export default function OperatorPage() {
       ) : (
         queue.map((t) => <ReviewCard key={t.id} transfer={t} enabled={canDecide} onDone={load} />)
       )}
+
+      <h2 className="pt-4 text-xl font-semibold">Settlement</h2>
+      <SettlementOverview />
     </main>
   );
 }

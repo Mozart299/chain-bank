@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Circle, X } from "lucide-react";
+import { ArrowLeft, Check, Circle, Copy, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type SubmitEvent } from "react";
@@ -11,7 +11,7 @@ import { TotpField } from "@/components/totp-field";
 import { TransferStatus } from "@/components/transfer-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { awaitingCustomer, awaitingReview, formatMoney, REASONS, STATUS, type Transfer } from "@/lib/banking";
+import { awaitingCustomer, awaitingReview, formatMoney, REASONS, settling, STATUS, type Transfer } from "@/lib/banking";
 import { api, errorMessage } from "@/lib/client";
 
 export default function TransferPage() {
@@ -31,6 +31,14 @@ export default function TransferPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch from the API
     void load();
   }, [load]);
+
+  // Follow on-chain settlement live: poll every 2 s until the transfer reaches a final state.
+  const live = transfer !== null && settling(transfer);
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => void load(), 2000);
+    return () => clearInterval(timer);
+  }, [live, load]);
 
   if (error && !transfer) return <FormError message={error} />;
   if (!transfer) {
@@ -81,14 +89,18 @@ export default function TransferPage() {
           {t.failureReason && (
             <p className="text-muted-foreground">{REASONS[t.failureReason] ?? t.failureReason}</p>
           )}
-          {t.state === "APPROVED" && t.crossBank && (
+          {t.crossBank && ["APPROVED", "SUBMITTED"].includes(t.state) && (
             <p className="text-muted-foreground">
-              The money has left your account and arrived in the payee&apos;s. The two banks still settle with each
-              other using fictional settlement tokens on the local chain (added in Phase 3).
+              The money has left your account and arrived in the payee&apos;s. The two banks are now settling with
+              each other using fictional settlement tokens on the local chain.
             </p>
           )}
         </CardContent>
       </Card>
+
+      {t.crossBank && t.state !== "VALIDATED" && t.state !== "REJECTED" && t.state !== "CANCELLED" && (
+        <SettlementCard transfer={t} />
+      )}
 
       {awaitingCustomer(t) && <ApproveCard transfer={t} onDone={load} />}
 
@@ -120,7 +132,7 @@ export default function TransferPage() {
                   <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
                   <div>
                     <p className="font-medium">{STATUS[e.toState as Transfer["state"]]?.label ?? e.toState}</p>
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-muted-foreground text-xs break-all">
                       {new Date(e.at).toLocaleString()}
                       {e.reason ? ` · ${REASONS[e.reason] ?? e.reason}` : ""}
                     </p>
@@ -132,6 +144,78 @@ export default function TransferPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function SettlementCard({ transfer: t }: { transfer: Transfer }) {
+  const s = t.settlement;
+  const done = t.state === "CONFIRMED" || t.state === "RECONCILED";
+  const shown = s ? Math.min(s.confirmations, s.required) : 0;
+  const pct = s ? Math.round((shown / s.required) * 100) : 0;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>On-chain settlement</CardTitle>
+        <CardDescription>
+          {!s
+            ? "Queued: the bank's gateway will submit it to the local chain in a moment."
+            : t.state === "RECONCILED"
+              ? "Final and matched against the bank's ledger."
+              : done
+                ? "Final. Waiting for the reconciliation check."
+                : s.status === "REORGED"
+                  ? "The block was replaced by a chain reorganisation; re-confirming."
+                  : s.status === "REVERTED"
+                    ? "The transaction was rejected on-chain. The bank is investigating."
+                    : `Waiting for ${s.required} confirmations before it counts as final.`}
+        </CardDescription>
+      </CardHeader>
+      {s && (
+        <CardContent className="grid gap-4 text-sm">
+          <div className="grid gap-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Confirmations</span>
+              <span className="tabular-nums">
+                {shown} of {s.required}
+              </span>
+            </div>
+            <div
+              role="progressbar"
+              aria-label="Settlement confirmations"
+              aria-valuemin={0}
+              aria-valuemax={s.required}
+              aria-valuenow={shown}
+              className="bg-muted h-2 overflow-hidden rounded-full"
+            >
+              <div className="bg-primary h-full transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+          <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
+            <dt className="text-muted-foreground">Transaction</dt>
+            <dd className="flex min-w-0 items-center gap-1">
+              <span className="truncate font-mono text-xs" title={s.txHash}>
+                {s.txHash}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Copy transaction hash"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(s.txHash);
+                  toast.success("Transaction hash copied");
+                }}
+              >
+                <Copy aria-hidden />
+              </Button>
+            </dd>
+            <dt className="text-muted-foreground">Block</dt>
+            <dd className="tabular-nums">{s.blockNumber ?? "pending"}</dd>
+            <dt className="text-muted-foreground">Status</dt>
+            <dd>{s.status}</dd>
+          </dl>
+        </CardContent>
+      )}
+    </Card>
   );
 }
 

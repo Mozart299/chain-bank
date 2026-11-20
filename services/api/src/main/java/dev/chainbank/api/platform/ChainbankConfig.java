@@ -49,8 +49,39 @@ public interface ChainbankConfig {
     }
 
     interface Chain {
-        /** JSON-RPC endpoint of the EVM chain (Anvil locally); used by the Phase 3 gateway. */
+        /** JSON-RPC endpoint of the EVM chain (Anvil locally). */
         String rpcUrl();
+
+        @WithDefault("31337")
+        long chainId();
+
+        /** Blocks (including the inclusion block) before a settlement counts as final (ADR 0006). */
+        @WithDefault("2")
+        int confirmations();
+
+        /** Deploy and configure the settlement contract automatically (local Compose and tests only). */
+        @WithDefault("false")
+        boolean autoDeploy();
+
+        /** Gateway key holding SETTLER_ROLE. Absent means settlement is disabled. */
+        Optional<String> settlerKey();
+
+        /** Governance key (deploy, register, mint, pause). A real deployment would keep this offline. */
+        Optional<String> adminKey();
+
+        /** Settlement wallet per institution code, e.g. BANK_A=0x... */
+        java.util.Map<String, String> institutionWallets();
+
+        /** Rebroadcast a submitted transaction if no receipt appears within this time. */
+        @WithDefault("PT15S")
+        Duration rebroadcastAfter();
+
+        @WithDefault("10")
+        int maxSubmitAttempts();
+
+        /** Settlement worker interval, read by its @Scheduled expression. */
+        @WithDefault("2s")
+        String pollEvery();
     }
 
     interface Web {

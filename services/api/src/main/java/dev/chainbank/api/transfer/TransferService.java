@@ -87,10 +87,14 @@ public class TransferService {
     public record Event(String fromState, String toState, String reason, Instant at) {
     }
 
+    /** On-chain settlement of a cross-bank transfer (spec: the user sees the transaction hash). */
+    public record Settlement(String txHash, Long blockNumber, int confirmations, int required, String status) {
+    }
+
     public record TransferView(UUID id, String state, String direction, long amount, String currency, String reference,
             Party source, Party destination, boolean crossBank, boolean requiresStepUp, boolean stepUpApproved,
             boolean requiresReview, boolean operatorApproved, String failureReason, Instant createdAt,
-            Instant expiresAt, Instant approvedAt, List<Event> events) {
+            Instant expiresAt, Instant approvedAt, List<Event> events, Settlement settlement) {
     }
 
     public record CreateResult(TransferView transfer, boolean replayed) {
@@ -679,7 +683,8 @@ public class TransferService {
         }
     }
 
-    private static void transition(Connection c, UUID id, String from, String to, String reason, Instant now)
+    /** Compare-and-set state change plus an append-only transfer_events row. Shared with the settlement worker. */
+    public static void transition(Connection c, UUID id, String from, String to, String reason, Instant now)
             throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
                 UPDATE transfers SET state = ?, failure_reason = coalesce(?, failure_reason), updated_at = ?
@@ -696,7 +701,7 @@ public class TransferService {
         event(c, id, from, to, reason, now);
     }
 
-    private static void event(Connection c, UUID id, String from, String to, String reason, Instant now)
+    public static void event(Connection c, UUID id, String from, String to, String reason, Instant now)
             throws SQLException {
         try (PreparedStatement ps = c.prepareStatement("""
                 INSERT INTO transfer_events (transfer_id, from_state, to_state, reason, occurred_at) VALUES (?, ?, ?, ?, ?)""")) {
@@ -715,6 +720,25 @@ public class TransferService {
             ps.setObject(2, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
+            }
+        }
+    }
+
+    /** Latest settlement transaction for the transfer, preferring the final one. */
+    private Settlement settlement(Connection c, UUID transferId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT tx_hash, block_number, confirmations, status FROM chain_txs
+                WHERE transfer_id = ? AND status <> 'DROPPED'
+                ORDER BY (status = 'FINAL') DESC, (status = 'REVERTED') ASC, created_at DESC LIMIT 1""")) {
+            ps.setObject(1, transferId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                long block = rs.getLong(2);
+                Long blockNumber = rs.wasNull() ? null : block;
+                return new Settlement(rs.getString(1), blockNumber, rs.getInt(3), config.chain().confirmations(),
+                        rs.getString(4));
             }
         }
     }
@@ -751,7 +775,7 @@ public class TransferService {
         }
     }
 
-    private static TransferView view(Connection c, UUID viewer, UUID id) throws SQLException {
+    private TransferView view(Connection c, UUID viewer, UUID id) throws SQLException {
         TransferView v;
         try (PreparedStatement ps = c.prepareStatement("""
                 SELECT t.id, t.state, t.amount_minor, t.currency, t.reference, t.initiated_by,
@@ -782,7 +806,7 @@ public class TransferService {
                         new Party(rs.getString(10), rs.getString(11), rs.getString(12)), rs.getBoolean(13),
                         rs.getBoolean(14), rs.getBoolean(15), rs.getBoolean(16), rs.getBoolean(17), rs.getString(18),
                         rs.getTimestamp(19).toInstant(), rs.getTimestamp(20).toInstant(),
-                        approvedAt == null ? null : approvedAt.toInstant(), new ArrayList<>());
+                        approvedAt == null ? null : approvedAt.toInstant(), new ArrayList<>(), settlement(c, id));
             }
         }
         try (PreparedStatement ps = c.prepareStatement(

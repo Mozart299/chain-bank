@@ -50,18 +50,20 @@ export function SiteHeader() {
         </div>
 
         <nav aria-label="Main" className="flex items-center gap-1">
-          {navLink("/", "Home")}
+          {/* The logo already links home; drop the text link on narrow screens to make room. */}
+          <span className="hidden sm:contents">{navLink("/", "Home")}</span>
           {status === "authenticated" && me ? (
             <>
               {navLink("/account", "Account")}
               {me.roles.includes("BANK_OPERATOR") &&
                 navLink("/operator", "Reviews")}
+              {me.roles.includes("SYSTEM_ADMIN") && navLink("/admin", "Admin")}
               <span className="text-muted-foreground hidden px-2 text-sm md:inline">
                 {me.displayName}
               </span>
               <Button variant="outline" size="sm" onClick={signOut}>
                 <LogOut aria-hidden />
-                Sign out
+                <span className="sr-only sm:not-sr-only">Sign out</span>
               </Button>
             </>
           ) : status === "anonymous" ? (

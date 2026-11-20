@@ -16,8 +16,14 @@ services:
 
   chain:
     # Local EVM (chain id 31337). Deterministic dev accounts; never use these keys anywhere real.
-    image: ghcr.io/foundry-rs/foundry:stable
-    entrypoint: ["anvil", "--host", "0.0.0.0", "--chain-id", "31337", "--block-time", "2"]
+    # Pinned (not :stable) for reproducibility and supply-chain safety.
+    image: ghcr.io/foundry-rs/foundry:v1.8.7
+    # The chain state is saved to a volume (every 10 s and on shutdown), so it survives restarts together with
+    # Postgres. `make reset` wipes both.
+    user: root
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--chain-id", "31337", "--block-time", "2",
+                 "--state", "/data/anvil-state.json", "--state-interval", "10"]
+    volumes: [chaindata:/data]
     ports: ["127.0.0.1:8545:8545"]
     healthcheck:
       test: ["CMD", "cast", "block-number", "--rpc-url", "http://127.0.0.1:8545"]
@@ -41,6 +47,11 @@ services:
       QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
       QUARKUS_HTTP_PROXY_ALLOW_X_FORWARDED: "true"
       QUARKUS_HTTP_PROXY_TRUSTED_PROXIES: 172.16.0.0/12
+      # Settlement gateway (ADR 0006). Anvil's PUBLIC dev keys #1 (governance) and #2 (settler): local only.
+      CHAIN_ID: "31337"
+      CHAINBANK_CHAIN_AUTO_DEPLOY: "true"
+      CHAIN_ADMIN_KEY: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+      CHAIN_SETTLER_KEY: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -68,3 +79,4 @@ services:
 
 volumes:
   pgdata:
+  chaindata:

@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Phase 1 end-to-end check against the running stack (make up), through the web app's /api proxy:
 // register -> TOTP confirm -> login -> me -> CSRF enforced -> wallet challenge -> sign -> verify
-// -> replay rejected -> cross-bank transfer -> TOTP approval -> idempotent replay -> balances
-// -> logout -> session dead.
+// -> replay rejected -> cross-bank transfer -> TOTP approval -> idempotent replay -> on-chain
+// settlement reconciled -> balances -> logout -> session dead.
 import { createHmac, randomUUID } from "node:crypto";
 
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
-const WEB = process.env.WEB_URL ?? "http://localhost:3000";
-const ORIGIN = new URL(WEB).origin;
+// 127.0.0.1, not localhost: Compose binds IPv4 loopback, and another dev server on ::1 must not shadow it.
+const WEB = process.env.WEB_URL ?? "http://127.0.0.1:3000";
+// The browser origin the API allows (chainbank.web.allowed-origins).
+const ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:3000";
 
 let failures = 0;
 const ok = (msg) => console.log(`  \x1b[32mok\x1b[0m  ${msg}`);
@@ -73,7 +75,7 @@ async function call(path, { method = "GET", body, cookie, csrf } = {}) {
   return { status: res.status, json, headers: res.headers };
 }
 
-console.log("ChainBank end-to-end (auth, wallet, transfers)");
+console.log("ChainBank end-to-end (auth, wallet, transfers, settlement)");
 
 const email = `e2e-${randomUUID().slice(0, 8)}@example.test`;
 const password = "e2e correct horse battery staple";
@@ -174,6 +176,26 @@ expect(
   replayed.status === 200 && replayed.headers.get("idempotent-replayed") === "true" && replayBody.id === transfer.id,
   "retry with same Idempotency-Key returns the original",
   replayed.status,
+);
+
+// --- Phase 3: on-chain settlement -----------------------------------------------------------
+// The gateway submits the settlement, waits for 2 confirmations, indexes the event and reconciles.
+let settled = null;
+const deadline = Date.now() + 90_000;
+while (Date.now() < deadline) {
+  const r = await call(`/api/transfers/${transfer.id}`, { cookie });
+  if (r.json?.state === "RECONCILED" || ["FAILED", "PENDING_INVESTIGATION"].includes(r.json?.state)) {
+    settled = r.json;
+    break;
+  }
+  await new Promise((res) => setTimeout(res, 1000));
+}
+expect(settled?.state === "RECONCILED", "cross-bank transfer settled on-chain and reconciled", settled?.state ?? "timeout");
+expect(/^0x[0-9a-f]{64}$/.test(settled?.settlement?.txHash ?? ""), "transfer shows its settlement tx hash", settled?.settlement?.txHash);
+expect(
+  settled?.settlement?.status === "FINAL" && settled?.settlement?.confirmations >= settled?.settlement?.required,
+  "settlement reached finality",
+  `${settled?.settlement?.status} ${settled?.settlement?.confirmations}/${settled?.settlement?.required}`,
 );
 
 const after1 = (await call("/api/accounts", { cookie })).json?.[0];

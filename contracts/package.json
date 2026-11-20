@@ -6,7 +6,8 @@
   "scripts": {
     "build": "hardhat build",
     "test": "hardhat test",
-    "node": "hardhat node"
+    "node": "hardhat node",
+    "export": "hardhat build && node scripts/export-abi.mjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.1.10",

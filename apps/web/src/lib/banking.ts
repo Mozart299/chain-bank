@@ -52,7 +52,55 @@ export type Transfer = {
   expiresAt: string;
   approvedAt: string | null;
   events: { fromState: string | null; toState: string; reason: string | null; at: string }[];
+  settlement: Settlement | null;
 };
+
+export type Settlement = {
+  txHash: string;
+  blockNumber: number | null;
+  confirmations: number;
+  required: number;
+  status: "SUBMITTED" | "MINED" | "FINAL" | "REVERTED" | "DROPPED" | "REORGED";
+};
+
+export type Position = {
+  institution: string;
+  pseudonym: string;
+  wallet: string;
+  offChainLedger: number;
+  outgoingUnsettled: number;
+  incomingUnsettled: number;
+  expectedOnChain: number;
+  onChain: number | null;
+  matched: boolean;
+  asOfBlock: number;
+};
+
+export type ReconciliationException = {
+  id: string;
+  transferId: string | null;
+  chainEventId: number | null;
+  kind: string;
+  status: "OPEN" | "RETRYING" | "RESOLVED";
+  note: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+
+export type ChainStatus = {
+  chainId: number;
+  contract: string | null;
+  paused: boolean;
+  latestBlock: number;
+  confirmations: number;
+  pendingOutbox: number;
+  openTransactions: number;
+};
+
+/** States in which a cross-bank transfer is still moving on-chain (worth polling). */
+export function settling(t: Transfer): boolean {
+  return t.crossBank && (t.state === "APPROVED" || t.state === "SUBMITTED" || t.state === "CONFIRMED" || t.state === "PENDING_INVESTIGATION");
+}
 
 /** Amounts are integer minor units end to end; xUGX has no decimals. */
 export function formatMoney(amount: number, currency = "xUGX"): string {
@@ -103,4 +151,6 @@ export const REASONS: Record<string, string> = {
   CANCELLED_BY_CUSTOMER: "You cancelled this transfer.",
   EXPIRED: "Not approved within 15 minutes, so it was cancelled and the funds released.",
   BOOK_TRANSFER: "Both accounts are at the same bank, so it completed instantly.",
+  REORG: "The block holding the settlement was replaced (chain reorganisation); it is being re-confirmed.",
+  REVERTED: "The settlement transaction was rejected on-chain; the bank is investigating.",
 };
