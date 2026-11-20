@@ -1,5 +1,5 @@
 # Build stage
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY pom.xml .
 RUN mvn -B -q dependency:go-offline
@@ -7,7 +7,7 @@ COPY src ./src
 RUN mvn -B -q package -DskipTests
 
 # Runtime stage
-FROM registry.access.redhat.com/ubi9/openjdk-17-runtime:1.24
+FROM registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24
 ENV LANGUAGE='en_US:en'
 COPY --from=build --chown=185 /src/target/quarkus-app/lib/ /deployments/lib/
 COPY --from=build --chown=185 /src/target/quarkus-app/*.jar /deployments/
