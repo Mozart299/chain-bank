@@ -150,6 +150,7 @@ class SettlementFlowTest extends ApiTestBase {
                 id, signed.txHash(), settlementId, signed.nonce().longValue(), signed.raw(), id);
 
         confirm(); // no receipt, overdue: rebroadcast the stored transaction
+        confirm(); // the rebroadcast is mined: 1 of 2 confirmations
         mine(1);
         confirm();
         assertEquals("CONFIRMED", state(alice, id));
@@ -290,10 +291,12 @@ class SettlementFlowTest extends ApiTestBase {
     // --- helpers ---------------------------------------------------------------------------------
 
     /**
-     * Anvil mines asynchronously: eth_sendRawTransaction returns before the block exists. Wait until
-     * every open settlement transaction has a receipt (or 5 s pass), then run the confirmer once.
+     * Anvil mines asynchronously: eth_sendRawTransaction returns before the block exists. Wait (up to
+     * 5 s) until every open settlement transaction has a receipt. Called before confirming AND before
+     * mining, so an explicit evm_mine never swallows a still-pending transaction into its own block
+     * (which would silently count one confirmation fewer).
      */
-    private void confirm() {
+    private void awaitReceipts() {
         long deadline = System.currentTimeMillis() + 5_000;
         while (System.currentTimeMillis() < deadline) {
             boolean allMined = true;
@@ -308,14 +311,19 @@ class SettlementFlowTest extends ApiTestBase {
                 throw new RuntimeException(e);
             }
             if (allMined) {
-                break;
+                return;
             }
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                return;
             }
         }
+    }
+
+    private void confirm() {
+        awaitReceipts();
         worker.confirm();
     }
 
@@ -366,6 +374,7 @@ class SettlementFlowTest extends ApiTestBase {
     }
 
     private void mine(int blocks) {
+        awaitReceipts();
         try {
             for (int i = 0; i < blocks; i++) {
                 new Request<>("evm_mine", List.of(), rpc, VoidResponse.class).send();
