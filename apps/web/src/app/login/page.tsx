@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type SubmitEvent } from "react";
 
 import { FormError } from "@/components/form-error";
+import { useRedirectIfAuthenticated, useSession } from "@/components/session-provider";
 import { TotpField } from "@/components/totp-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,8 @@ import { api, errorMessage } from "@/lib/client";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refresh } = useSession();
+  useRedirectIfAuthenticated();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -27,6 +30,7 @@ export default function LoginPage() {
         method: "POST",
         body: { email: form.get("email"), password: form.get("password"), code: form.get("code") },
       });
+      await refresh();
       router.push("/account");
     } catch (err) {
       setError(errorMessage(err));

@@ -7,6 +7,7 @@ import { useState, type SubmitEvent } from "react";
 import { toast } from "sonner";
 
 import { FormError } from "@/components/form-error";
+import { useRedirectIfAuthenticated } from "@/components/session-provider";
 import { TotpField } from "@/components/totp-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,7 @@ type Enrollment = { userId: string; otpauthUri: string; totpSecret: string };
 
 export default function RegisterPage() {
   const router = useRouter();
+  useRedirectIfAuthenticated();
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);

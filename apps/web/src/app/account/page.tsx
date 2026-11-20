@@ -2,63 +2,32 @@
 
 import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type SubmitEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import { toast } from "sonner";
 
 import { FormError } from "@/components/form-error";
+import { useSession } from "@/components/session-provider";
 import { TotpField } from "@/components/totp-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { api, errorMessage, loadMe, setCsrfToken, type Me } from "@/lib/client";
+import { api, errorMessage, setCsrfToken } from "@/lib/client";
 
 import { WalletPanel } from "./wallet-panel";
 
 export default function AccountPage() {
   const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const current = await loadMe();
-      if (!current) {
-        router.replace("/login");
-        return;
-      }
-      setMe(current);
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [router]);
+  const { me, status, refresh } = useSession();
 
   useEffect(() => {
-    // Loading the session is an external-system sync, the intended use of an effect.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
-  }, [refresh]);
+    if (status === "anonymous") router.replace("/login");
+  }, [status, router]);
 
-  async function logout() {
-    await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    setCsrfToken(null);
-    router.replace("/login");
-  }
-
-  if (loading) {
+  if (status !== "authenticated" || !me) {
     return (
       <main className="text-muted-foreground mx-auto w-full max-w-2xl px-4 py-12" aria-live="polite">
         Loading your account…
-      </main>
-    );
-  }
-  if (!me) {
-    return (
-      <main className="mx-auto w-full max-w-2xl px-4 py-12">
-        <FormError message={error} />
       </main>
     );
   }
@@ -67,33 +36,34 @@ export default function AccountPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl space-y-6 px-4 py-10">
-      <header className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">{me.displayName}</h1>
-          <p className="text-muted-foreground text-sm">{me.email}</p>
-          <div className="flex flex-wrap gap-2">
-            {me.roles.map((r) => (
-              <Badge key={r} variant="secondary">
-                {r}
-              </Badge>
-            ))}
-          </div>
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold">{me.displayName}</h1>
+        <p className="text-muted-foreground text-sm">{me.email}</p>
+        <div className="flex flex-wrap gap-2">
+          {me.roles.map((r) => (
+            <Badge key={r} variant="secondary">
+              {r}
+            </Badge>
+          ))}
         </div>
-        <Button variant="outline" onClick={logout}>
-          Sign out
-        </Button>
       </header>
 
       <StepUpCard active={stepUpActive} until={me.stepUpValidUntil} onDone={refresh} />
 
       {me.roles.includes("CUSTOMER") && <WalletPanel stepUpActive={stepUpActive} />}
 
-      <SessionsCard stepUpActive={stepUpActive} onRevoked={() => router.replace("/login")} />
+      <SessionsCard
+        stepUpActive={stepUpActive}
+        onRevoked={async () => {
+          await refresh();
+          router.replace("/login");
+        }}
+      />
     </main>
   );
 }
 
-function StepUpCard({ active, until, onDone }: { active: boolean; until: string | null; onDone: () => void }) {
+function StepUpCard({ active, until, onDone }: { active: boolean; until: string | null; onDone: () => unknown }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -130,7 +100,7 @@ function StepUpCard({ active, until, onDone }: { active: boolean; until: string 
           </Alert>
         ) : (
           <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-4" noValidate>
-            <TotpField description="Unlocks sensitive actions for 5 minutes" />
+            <TotpField description={null} />
             <Button type="submit" disabled={pending} aria-busy={pending || undefined}>
               {pending ? "Verifying…" : "Verify"}
             </Button>
@@ -142,7 +112,7 @@ function StepUpCard({ active, until, onDone }: { active: boolean; until: string 
   );
 }
 
-function SessionsCard({ stepUpActive, onRevoked }: { stepUpActive: boolean; onRevoked: () => void }) {
+function SessionsCard({ stepUpActive, onRevoked }: { stepUpActive: boolean; onRevoked: () => unknown }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 

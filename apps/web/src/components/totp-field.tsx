@@ -14,7 +14,8 @@ export function TotpField({
 }: {
   name?: string;
   label?: string;
-  description?: string;
+  /** Pass null to hide the hint (e.g. when the surrounding card already explains it). */
+  description?: string | null;
 }) {
   const id = useId();
   return (
@@ -26,7 +27,7 @@ export function TotpField({
         maxLength={6}
         pattern={REGEXP_ONLY_DIGITS}
         autoComplete="one-time-code"
-        aria-describedby={`${id}-hint`}
+        aria-describedby={description ? `${id}-hint` : undefined}
         required
       >
         <InputOTPGroup>
@@ -41,9 +42,11 @@ export function TotpField({
           <InputOTPSlot index={5} />
         </InputOTPGroup>
       </InputOTP>
-      <p id={`${id}-hint`} className="text-muted-foreground text-xs">
-        {description}
-      </p>
+      {description && (
+        <p id={`${id}-hint`} className="text-muted-foreground text-xs">
+          {description}
+        </p>
+      )}
     </div>
   );
 }

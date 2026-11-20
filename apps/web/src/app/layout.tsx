@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 
+import { SessionProvider } from "@/components/session-provider";
+import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
@@ -20,7 +22,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={cn("h-full antialiased font-sans", geist.variable)} suppressHydrationWarning>
       <body className="flex min-h-full flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
+          <SessionProvider>
+            <SiteHeader />
+            <div className="flex flex-1 flex-col">{children}</div>
+          </SessionProvider>
           <Toaster richColors />
         </ThemeProvider>
       </body>

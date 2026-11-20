@@ -1,11 +1,10 @@
 import { TriangleAlert } from "lucide-react";
-import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
+import { HomeActions } from "@/components/home-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getInstitutions, getReadiness } from "@/lib/api";
 
@@ -22,17 +21,7 @@ export default function Home() {
           Two-bank sandbox: double-entry ledger off-chain, settlement tokens on a local EVM chain.
         </p>
       </div>
-      <nav aria-label="Account" className="flex flex-wrap gap-3">
-        <Link href="/login" className={buttonVariants()}>
-          Sign in
-        </Link>
-        <Link href="/register" className={buttonVariants({ variant: "outline" })}>
-          Register
-        </Link>
-        <Link href="/account" className={buttonVariants({ variant: "link" })}>
-          My account
-        </Link>
-      </nav>
+      <HomeActions />
       <Suspense fallback={<p className="text-muted-foreground" aria-live="polite">Checking backend…</p>}>
         <SystemStatus />
       </Suspense>
