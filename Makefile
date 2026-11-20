@@ -3,7 +3,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml
 JAVA21_HOME ?= $(firstword $(wildcard $(HOME)/.jdks/jdk-21*/Contents/Home) $(shell /usr/libexec/java_home -v 21 2>/dev/null))
 MVN := $(if $(JAVA21_HOME),JAVA_HOME=$(JAVA21_HOME) ,)./mvnw
 
-.PHONY: up down reset logs smoke test test-api test-contracts test-web api-dev web-dev
+.PHONY: up down reset logs smoke test test-api test-contracts test-web api-dev web-dev psql openapi
 
 up: ## Build and start the full stack, wait for health
 	$(COMPOSE) up -d --build --wait
@@ -23,8 +23,8 @@ smoke:
 
 test: test-api test-contracts test-web
 
-test-api:
-	cd services/api && $(MVN) -B test
+test-api: ## all API tests, or one suite: make test-api TEST=TransferConcurrencyTest
+	cd services/api && $(MVN) -B test $(if $(TEST),-Dtest=$(TEST),)
 
 test-contracts:
 	pnpm --filter @chainbank/contracts test
@@ -37,3 +37,9 @@ api-dev: ## Quarkus dev mode (starts its own Postgres via Dev Services)
 
 web-dev:
 	pnpm --filter @chainbank/web dev
+
+psql: ## SQL shell on the running stack's database
+	$(COMPOSE) exec postgres psql -U chainbank chainbank
+
+openapi: ## refresh docs/api/openapi.yaml from the running API
+	curl -fsS http://127.0.0.1:8080/q/openapi -o docs/api/openapi.yaml

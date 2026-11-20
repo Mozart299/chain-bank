@@ -1,8 +1,10 @@
 # ChainBank
 
-The project is defined by **[docs/specification.md](docs/specification.md)**. Read the relevant sections before starting any feature or phase. Decisions that refine the spec live in `docs/adr/` and override it. Security status is tracked in `docs/threat-model.md`.
+The project is defined by **[docs/specification.md](docs/specification.md)**. Start with [docs/architecture.md](docs/architecture.md) for the map, [docs/runbook.md](docs/runbook.md) for setup and troubleshooting, and [docs/testing.md](docs/testing.md) for how tests work. Read the relevant sections before starting any feature or phase. Decisions that refine the spec live in `docs/adr/` and override it. Security status is tracked in `docs/threat-model.md`.
 
 ## Rules
+
+- Keep the docs current with the code: architecture diagrams, learning-guide exercises (test names and symbols must exist), runbook variables, and the API table (`make openapi`).
 
 - Build phase by phase, following spec §14. Each phase is done only when its exit condition is met and backed by tests.
 - Money is `bigint` minor units of xUGX. Never use floating point.

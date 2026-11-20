@@ -1,0 +1,1288 @@
+---
+openapi: 3.1.0
+components:
+  schemas:
+    Account:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        accountNumber:
+          type: string
+        institution:
+          $ref: "#/components/schemas/Institution1"
+        currency:
+          type: string
+        ledgerBalance:
+          type: integer
+          format: int64
+        reservedBalance:
+          type: integer
+          format: int64
+        availableBalance:
+          type: integer
+          format: int64
+        status:
+          type: string
+    ApproveRequest:
+      type: object
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          pattern: "^\\d{6}$"
+    Batch:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        firstEventId:
+          type: integer
+          format: int64
+        lastEventId:
+          type: integer
+          format: int64
+        eventCount:
+          type: integer
+          format: int32
+        merkleRoot:
+          type: string
+        status:
+          type: string
+        contract:
+          type: string
+        txHash:
+          type: string
+        blockNumber:
+          type: integer
+          format: int64
+        createdAt:
+          $ref: "#/components/schemas/Instant"
+        committedAt:
+          $ref: "#/components/schemas/Instant"
+    ChainStatus:
+      type: object
+      properties:
+        chainId:
+          type: integer
+          format: int64
+        contract:
+          type: string
+        auditAnchor:
+          type: string
+        paused:
+          type: boolean
+        latestBlock:
+          type: integer
+          format: int64
+        confirmations:
+          type: integer
+          format: int32
+        pendingOutbox:
+          type: integer
+          format: int64
+        openTransactions:
+          type: integer
+          format: int64
+    Challenge:
+      type: object
+      properties:
+        challengeId:
+          $ref: "#/components/schemas/UUID"
+        message:
+          type: string
+        expiresAt:
+          $ref: "#/components/schemas/Instant"
+    ChallengeRequest:
+      type: object
+      required:
+      - address
+      - chainId
+      properties:
+        address:
+          type: string
+          pattern: \S
+        chainId:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+    Check:
+      type: object
+      properties:
+        name:
+          type: string
+        ok:
+          type: boolean
+        detail:
+          type: string
+    CodeRequest:
+      type: object
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          pattern: "^\\d{6}$"
+    CreateTransferRequest:
+      type: object
+      required:
+      - sourceAccountId
+      - destinationAccountNumber
+      - currency
+      properties:
+        sourceAccountId:
+          $ref: "#/components/schemas/UUID"
+        destinationAccountNumber:
+          type: string
+          pattern: \S
+          maxLength: 32
+        amount:
+          type: integer
+          format: int64
+          maximum: 1000000000000
+          exclusiveMinimum: 0
+        currency:
+          type: string
+          pattern: \S
+        reference:
+          type: string
+          maxLength: 140
+    CredentialsRequest:
+      type: object
+      required:
+      - email
+      - password
+      - code
+      properties:
+        email:
+          type: string
+          pattern: \S
+          maxLength: 254
+        password:
+          type: string
+          pattern: \S
+          maxLength: 128
+        code:
+          type: string
+          pattern: "^\\d{6}$"
+    Entry:
+      type: object
+      properties:
+        lineId:
+          type: integer
+          format: int64
+        postedAt:
+          $ref: "#/components/schemas/Instant"
+        journalReference:
+          type: string
+        description:
+          type: string
+        transferId:
+          $ref: "#/components/schemas/UUID"
+        amount:
+          type: integer
+          format: int64
+        direction:
+          type: string
+    Event:
+      type: object
+      properties:
+        fromState:
+          type: string
+        toState:
+          type: string
+        reason:
+          type: string
+        at:
+          $ref: "#/components/schemas/Instant"
+    Instant:
+      type: string
+      format: date-time
+      examples:
+      - 2022-03-10T16:15:50Z
+    Institution:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        code:
+          type: string
+        name:
+          type: string
+        pseudonym:
+          type: string
+        status:
+          type: string
+    Institution1:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+    Link:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        address:
+          type: string
+        chainId:
+          type: integer
+          format: int64
+        verifiedAt:
+          $ref: "#/components/schemas/Instant"
+    Me:
+      type: object
+      properties:
+        userId:
+          $ref: "#/components/schemas/UUID"
+        email:
+          type: string
+        displayName:
+          type: string
+        institutionId:
+          $ref: "#/components/schemas/UUID"
+        roles:
+          type: array
+          items:
+            type: string
+        csrfToken:
+          type: string
+        stepUpValidUntil:
+          $ref: "#/components/schemas/Instant"
+        sessionExpiresAt:
+          $ref: "#/components/schemas/Instant"
+    Party:
+      type: object
+      properties:
+        accountNumber:
+          type: string
+        bank:
+          type: string
+        holder:
+          type: string
+    Position:
+      type: object
+      properties:
+        institution:
+          type: string
+        pseudonym:
+          type: string
+        wallet:
+          type: string
+        offChainLedger:
+          type: integer
+          format: int64
+        outgoingUnsettled:
+          type: integer
+          format: int64
+        incomingUnsettled:
+          type: integer
+          format: int64
+        expectedOnChain:
+          type: integer
+          format: int64
+        onChain:
+          type: integer
+          format: int64
+        matched:
+          type: boolean
+        asOfBlock:
+          type: integer
+          format: int64
+    ReconciliationException:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        transferId:
+          $ref: "#/components/schemas/UUID"
+        chainEventId:
+          type: integer
+          format: int64
+        kind:
+          type: string
+        status:
+          type: string
+        note:
+          type: string
+        createdAt:
+          $ref: "#/components/schemas/Instant"
+        resolvedAt:
+          $ref: "#/components/schemas/Instant"
+        resolutionNote:
+          type: string
+        retryCount:
+          type: integer
+          format: int32
+        retryable:
+          type: boolean
+    RegisterRequest:
+      type: object
+      required:
+      - email
+      - password
+      - displayName
+      - institutionCode
+      properties:
+        email:
+          type: string
+          pattern: \S
+          maxLength: 254
+        password:
+          type: string
+          pattern: \S
+          minLength: 12
+          maxLength: 128
+        displayName:
+          type: string
+          pattern: \S
+          maxLength: 80
+        institutionCode:
+          type: string
+          pattern: "^[A-Z0-9_]{2,16}$"
+    ResolveRequest:
+      type: object
+      required:
+      - note
+      properties:
+        note:
+          type: string
+          pattern: \S
+          minLength: 5
+          maxLength: 500
+    ReviewRequest:
+      type: object
+      required:
+      - decision
+      properties:
+        decision:
+          type: string
+          pattern: ^(APPROVE|REJECT)$
+    Settlement:
+      type: object
+      properties:
+        txHash:
+          type: string
+        blockNumber:
+          type: integer
+          format: int64
+        confirmations:
+          type: integer
+          format: int32
+        required:
+          type: integer
+          format: int32
+        status:
+          type: string
+    TransferView:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        state:
+          type: string
+        direction:
+          type: string
+        amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        reference:
+          type: string
+        source:
+          $ref: "#/components/schemas/Party"
+        destination:
+          $ref: "#/components/schemas/Party"
+        crossBank:
+          type: boolean
+        requiresStepUp:
+          type: boolean
+        stepUpApproved:
+          type: boolean
+        requiresReview:
+          type: boolean
+        operatorApproved:
+          type: boolean
+        failureReason:
+          type: string
+        createdAt:
+          $ref: "#/components/schemas/Instant"
+        expiresAt:
+          $ref: "#/components/schemas/Instant"
+        approvedAt:
+          $ref: "#/components/schemas/Instant"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        settlement:
+          $ref: "#/components/schemas/Settlement"
+    UUID:
+      type: string
+      format: uuid
+      pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+    Verification:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        eventsChecked:
+          type: integer
+          format: int64
+        firstInvalidEventId:
+          type: integer
+          format: int64
+    Verification1:
+      type: object
+      properties:
+        batchId:
+          type: integer
+          format: int64
+        valid:
+          type: boolean
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Check"
+    VerifyRequest:
+      type: object
+      required:
+      - challengeId
+      - signature
+      properties:
+        challengeId:
+          $ref: "#/components/schemas/UUID"
+        signature:
+          type: string
+          pattern: \S
+paths:
+  /api/accounts:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List
+      tags:
+      - Account Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/accounts/{id}/transactions:
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Entry"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Transactions
+      tags:
+      - Account Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/admin/chain:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChainStatus"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Status
+      tags:
+      - Chain Admin Resource
+      security:
+      - SecurityScheme:
+        - SYSTEM_ADMIN
+        - AUDITOR
+        - BANK_OPERATOR
+  /api/admin/chain/pause:
+    post:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChainStatus"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Pause
+      tags:
+      - Chain Admin Resource
+      security:
+      - SecurityScheme:
+        - SYSTEM_ADMIN
+  /api/admin/chain/unpause:
+    post:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChainStatus"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Unpause
+      tags:
+      - Chain Admin Resource
+      security:
+      - SecurityScheme:
+        - SYSTEM_ADMIN
+  /api/admin/users/{id}/suspend:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Suspend
+      tags:
+      - Admin Resource
+      security:
+      - SecurityScheme:
+        - SYSTEM_ADMIN
+  /api/audit/batches:
+    get:
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Batch"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Batches
+      tags:
+      - Audit Resource
+      security:
+      - SecurityScheme:
+        - AUDITOR
+        - COMPLIANCE_REVIEWER
+        - SYSTEM_ADMIN
+  /api/audit/batches/seal:
+    post:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Seal
+      tags:
+      - Audit Resource
+      security:
+      - SecurityScheme:
+        - SYSTEM_ADMIN
+  /api/audit/batches/{id}/export:
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Export
+      tags:
+      - Audit Resource
+      security:
+      - SecurityScheme:
+        - AUDITOR
+        - COMPLIANCE_REVIEWER
+        - SYSTEM_ADMIN
+  /api/audit/chain/verify:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Verification"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Verify Chain
+      tags:
+      - Audit Resource
+      security:
+      - SecurityScheme:
+        - AUDITOR
+        - COMPLIANCE_REVIEWER
+        - SYSTEM_ADMIN
+  /api/audit/{batch}/verify:
+    get:
+      parameters:
+      - name: batch
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Verification1"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Verify
+      tags:
+      - Audit Resource
+      security:
+      - SecurityScheme:
+        - AUDITOR
+        - COMPLIANCE_REVIEWER
+        - SYSTEM_ADMIN
+  /api/auth/login:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialsRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "400":
+          description: Bad Request
+      summary: Login
+      tags:
+      - Auth Resource
+  /api/auth/logout:
+    post:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Logout
+      tags:
+      - Auth Resource
+      security:
+      - SecurityScheme: []
+  /api/auth/me:
+    get:
+      parameters:
+      - name: cb_session
+        in: cookie
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Me
+      tags:
+      - Auth Resource
+      security:
+      - SecurityScheme: []
+  /api/auth/register:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "400":
+          description: Bad Request
+      summary: Register
+      tags:
+      - Auth Resource
+  /api/auth/sessions/revoke-all:
+    post:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Revoke All
+      tags:
+      - Auth Resource
+      security:
+      - SecurityScheme: []
+  /api/auth/step-up:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CodeRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Step Up
+      tags:
+      - Auth Resource
+      security:
+      - SecurityScheme: []
+  /api/auth/totp/confirm:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialsRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "400":
+          description: Bad Request
+      summary: Confirm
+      tags:
+      - Auth Resource
+  /api/institutions:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Institution"
+      summary: List
+      tags:
+      - Institution Resource
+  /api/operator/reviews:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransferView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Queue
+      tags:
+      - Operator Resource
+      security:
+      - SecurityScheme:
+        - BANK_OPERATOR
+  /api/operator/transfers/{id}/review:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Review
+      tags:
+      - Operator Resource
+      security:
+      - SecurityScheme:
+        - BANK_OPERATOR
+  /api/reconciliation/exceptions:
+    get:
+      parameters:
+      - name: open
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReconciliationException"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Exceptions
+      tags:
+      - Settlement Resource
+      security:
+      - SecurityScheme:
+        - BANK_OPERATOR
+        - AUDITOR
+        - COMPLIANCE_REVIEWER
+        - SYSTEM_ADMIN
+  /api/reconciliation/exceptions/{id}/resolve:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationException"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Resolve
+      tags:
+      - Settlement Resource
+      security:
+      - SecurityScheme:
+        - BANK_OPERATOR
+        - SYSTEM_ADMIN
+  /api/reconciliation/exceptions/{id}/retry:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationException"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Retry
+      tags:
+      - Settlement Resource
+      security:
+      - SecurityScheme:
+        - BANK_OPERATOR
+        - SYSTEM_ADMIN
+  /api/settlement/positions:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Position"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Positions
+      tags:
+      - Settlement Resource
+      security:
+      - SecurityScheme:
+        - BANK_OPERATOR
+        - AUDITOR
+        - COMPLIANCE_REVIEWER
+        - SYSTEM_ADMIN
+  /api/transfers:
+    get:
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TransferView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List
+      tags:
+      - Transfer Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+    post:
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransferRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Create
+      tags:
+      - Transfer Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/transfers/{id}:
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get
+      tags:
+      - Transfer Resource
+      security:
+      - SecurityScheme: []
+  /api/transfers/{id}/approve:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Approve
+      tags:
+      - Transfer Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/transfers/{id}/cancel:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferView"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Cancel
+      tags:
+      - Transfer Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/wallet:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Link"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List
+      tags:
+      - Wallet Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/wallet/challenge:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChallengeRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Challenge"
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Challenge
+      tags:
+      - Wallet Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/wallet/verify:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Verify
+      tags:
+      - Wallet Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+  /api/wallet/{id}:
+    delete:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Unlink
+      tags:
+      - Wallet Resource
+      security:
+      - SecurityScheme:
+        - CUSTOMER
+info:
+  title: ChainBank API
+  version: 0.1.0

@@ -4,6 +4,19 @@ A full-stack banking simulator for learning cryptographic identity, secure backe
 
 The project is guided by the **[specification](docs/specification.md)**. Decisions that refine it are in [`docs/adr/`](docs/adr/), and security status is in [`docs/threat-model.md`](docs/threat-model.md).
 
+## Documentation
+
+| Start here | |
+|---|---|
+| [Architecture](docs/architecture.md) | How the pieces fit, and one transfer end to end (diagrams) |
+| [Learning path](docs/learning/README.md) | Five guides, each with concepts, code pointers, hands-on tasks and "break it" exercises |
+| [Runbook](docs/runbook.md) | Setup, configuration, operations, troubleshooting |
+| [Testing](docs/testing.md) | Test suites, techniques, mutation checks |
+| [API reference](docs/api/README.md) | Endpoints, conventions, [OpenAPI](docs/api/openapi.yaml) |
+| [Specification](docs/specification.md) · [ADRs](docs/adr/) · [Threat model](docs/threat-model.md) | What we're building, why each decision was made, and what protects what |
+
+Each package also has its own README: [api](services/api/README.md), [web](apps/web/README.md), [contracts](contracts/README.md), [infra](infra/README.md), [audit verifier](tools/audit-verifier/README.md).
+
 > **Simulation only.** It holds no real money, no real customer data, and no claim to bank deposits. xUGX and the settlement tokens are fictional.
 
 ## Layout
@@ -40,6 +53,8 @@ pnpm install
 make api-dev          # Quarkus dev mode; Dev Services starts its own Postgres
 make web-dev          # Next.js on :3000, talks to CHAINBANK_API_URL (default :8080)
 make test             # API tests, contract tests, web lint and typecheck
+make test-api TEST=TransferConcurrencyTest   # one API suite
+make psql             # SQL shell on the running stack's database
 ```
 
 ## Demo users
